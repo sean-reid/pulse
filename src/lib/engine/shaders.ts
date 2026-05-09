@@ -69,9 +69,19 @@ void main() {
   float mask = texture(u_mask, v_texCoord).r;
 
   vec3 pulseTinted = pulseChroma * vec3(1.3, 0.85, 0.85);
-  vec3 pulseDelta = clamp(u_pulseAmp * 1.5 * mask * pulseTinted, -0.12, 0.12);
+  vec3 rawPulse = u_pulseAmp * 1.5 * mask * pulseTinted;
+  float pulseLen = length(rawPulse);
+  float pulseLimit = 0.10;
+  vec3 pulseDelta = pulseLen > 1e-6
+    ? rawPulse * (pulseLimit * tanh(pulseLen / pulseLimit) / pulseLen)
+    : vec3(0.0);
 
-  vec3 breathDelta = clamp(u_breathAmp * (1.0 - mask * 0.5) * breathBand, -0.15, 0.15);
+  vec3 rawBreath = u_breathAmp * (1.0 - mask * 0.5) * breathBand;
+  float breathLen = length(rawBreath);
+  float breathLimit = 0.15;
+  vec3 breathDelta = breathLen > 1e-6
+    ? rawBreath * (breathLimit * tanh(breathLen / breathLimit) / breathLen)
+    : vec3(0.0);
 
   vec3 amplified = current + pulseDelta + breathDelta;
 
