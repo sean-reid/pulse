@@ -25,9 +25,15 @@
   });
 
   let beatDuration = $derived(appState.bpm ? 60 / appState.bpm : 1);
-  let showVitals = $derived(appState.bpm !== null && appState.status === 'active');
-  let showBreathing = $derived(appState.breathingRate !== null && appState.status === 'active');
-  let showStats = $derived(appState.avgBpm !== null && appState.status === 'active');
+  let showVitals = $derived(
+    appState.faceDetected && appState.bpm !== null && appState.status === 'active',
+  );
+  let showBreathing = $derived(
+    appState.faceDetected && appState.breathingRate !== null && appState.status === 'active',
+  );
+  let showStats = $derived(
+    appState.faceDetected && appState.avgBpm !== null && appState.status === 'active',
+  );
   const classLabels = { relaxed: 'Relaxed', moderate: 'Moderate', elevated: 'Elevated' };
   const classColors = { relaxed: 'text-green', moderate: 'text-amber', elevated: 'text-accent' };
 </script>
@@ -69,7 +75,7 @@
             </div>
           {/if}
         </div>
-      {:else if appState.status === 'calibrating' || appState.status === 'active'}
+      {:else if appState.faceDetected && (appState.status === 'calibrating' || appState.status === 'active')}
         <div class="flex items-baseline gap-1.5">
           <span class="text-4xl font-semibold text-text-tertiary tabular-nums">--</span>
           <span class="text-xs text-text-tertiary">bpm</span>

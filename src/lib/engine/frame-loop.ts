@@ -33,6 +33,7 @@ import {
 } from '../utils/constants';
 
 const MAX_HISTORY = 60;
+const FACE_LOST_TIMEOUT_MS = 3000;
 
 export interface FrameLoop {
   start: () => void;
@@ -53,6 +54,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   const fusion = new VitalsFusion();
   let currentROIs: FaceROIs | null = null;
   let calibrationFrames = 0;
+  let lastFaceTime = 0;
   const bpmHistory: number[] = [];
 
   function updateRollingStats(bpm: number) {
@@ -109,9 +111,11 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
     if (isLoaded()) {
       if (frameCount % FACE_DETECT_INTERVAL === 0) {
-        const rois = detectFace(video, performance.now());
+        const now = performance.now();
+        const rois = detectFace(video, now);
         if (rois) {
           currentROIs = rois;
+          lastFaceTime = now;
           appState.faceDetected = true;
 
           const mask = generateFaceMask(rois.oval, video.videoWidth, video.videoHeight);
@@ -119,7 +123,22 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
           breathing.sampleLandmarks(rois.breathLandmarkY);
         } else {
+          currentROIs = null;
           appState.faceDetected = false;
+
+          if (
+            lastFaceTime > 0 &&
+            now - lastFaceTime > FACE_LOST_TIMEOUT_MS &&
+            appState.status === 'active'
+          ) {
+            appState.status = 'calibrating';
+            appState.reset();
+            rppg.reset();
+            breathing.reset();
+            fusion.reset();
+            calibrationFrames = 0;
+            bpmHistory.length = 0;
+          }
         }
       }
 
@@ -188,6 +207,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       fusion.reset();
       currentROIs = null;
       calibrationFrames = 0;
+      lastFaceTime = 0;
       frameCount = 0;
       lastVideoTime = -1;
       bpmHistory.length = 0;
