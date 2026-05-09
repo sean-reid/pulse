@@ -41,8 +41,8 @@
 
 <div class="fixed inset-0 bg-bg-primary flex flex-col">
   <div
-    class="flex-1 flex flex-col items-center justify-start gap-5 px-4 pt-5 pb-6 overflow-hidden
-              sm:pt-8 sm:gap-6"
+    class="flex-1 flex flex-col items-center justify-center gap-4 px-4 pb-6 overflow-hidden
+              sm:gap-5"
   >
     <!-- Camera -->
     <div class="relative w-full max-w-xs rounded-lg overflow-hidden flex-shrink-0 sm:max-w-sm">
@@ -97,28 +97,29 @@
       {/if}
     </div>
 
-    <!-- Waveform -->
-    <WaveformGraph signal={appState.waveformSignal} height={64} />
+    <!-- Waveform + stats -->
+    <div class="flex flex-col items-center gap-2 w-full">
+      <WaveformGraph signal={appState.waveformSignal} height={64} />
 
-    <!-- Rolling stats -->
-    {#if showStats}
-      <div class="w-full max-w-sm flex items-center justify-between text-sm px-2">
-        <div>
-          <span class="text-text-tertiary text-xs">Avg</span>
-          <span class="text-text-primary tabular-nums ml-1">{appState.avgBpm}</span>
-          <span class="text-text-tertiary text-xs ml-0.5">bpm</span>
+      {#if showStats}
+        <div class="w-full max-w-sm flex items-center justify-between text-sm px-2">
+          <div>
+            <span class="text-text-tertiary text-xs">Avg</span>
+            <span class="text-text-primary tabular-nums ml-1">{appState.avgBpm}</span>
+            <span class="text-text-tertiary text-xs ml-0.5">bpm</span>
+          </div>
+          <div>
+            <span class="text-text-tertiary text-xs">Variability</span>
+            <span class="text-text-primary tabular-nums ml-1">{appState.bpmVariability}</span>
+          </div>
+          {#if appState.classification}
+            <span class="{classColors[appState.classification]} text-sm font-medium">
+              {classLabels[appState.classification]}
+            </span>
+          {/if}
         </div>
-        <div>
-          <span class="text-text-tertiary text-xs">Variability</span>
-          <span class="text-text-primary tabular-nums ml-1">{appState.bpmVariability}</span>
-        </div>
-        {#if appState.classification}
-          <span class="{classColors[appState.classification]} text-sm font-medium">
-            {classLabels[appState.classification]}
-          </span>
-        {/if}
-      </div>
-    {/if}
+      {/if}
+    </div>
   </div>
 </div>
 

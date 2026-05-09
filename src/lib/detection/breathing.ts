@@ -2,6 +2,7 @@ import {
   RingBuffer,
   detrend,
   hammingWindow,
+  bandpassFilter,
   fft,
   magnitudeSpectrum,
   findDominantPeak,
@@ -22,6 +23,9 @@ export interface BreathResult {
   rate: number;
   confidence: number;
 }
+
+const MIN_SAMPLES = 150;
+const MIN_CONFIDENCE = 0.06;
 
 export class BreathingDetector {
   private buffer = new RingBuffer(SIGNAL_BUFFER_SIZE);
@@ -69,11 +73,12 @@ export class BreathingDetector {
   }
 
   computeBreathingRate(): BreathResult | null {
-    if (this.buffer.length < 120) return null;
+    if (this.buffer.length < MIN_SAMPLES) return null;
 
     const raw = this.buffer.toArray();
     const detrended = detrend(raw);
-    const windowed = hammingWindow(detrended);
+    const filtered = bandpassFilter(detrended, CAMERA_FPS, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
+    const windowed = hammingWindow(filtered);
 
     const n = nextPowerOf2(windowed.length);
     const re = new Float64Array(n);
@@ -84,7 +89,7 @@ export class BreathingDetector {
     const spectrum = magnitudeSpectrum(re, im);
 
     const peak = findDominantPeak(spectrum, CAMERA_FPS, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
-    if (!peak) return null;
+    if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
 
     const rawRate = peak.frequency * 60;
     if (rawRate < BREATH_MIN || rawRate > BREATH_MAX) return null;

@@ -2,6 +2,7 @@ import {
   RingBuffer,
   detrend,
   hammingWindow,
+  bandpassFilter,
   fft,
   magnitudeSpectrum,
   findDominantPeak,
@@ -30,11 +31,13 @@ export interface BpmResult {
   signal: Float64Array;
 }
 
+const MIN_SAMPLES = 150;
+const MIN_CONFIDENCE = 0.08;
+
 export class RppgDetector {
   private buffer = new RingBuffer(SIGNAL_BUFFER_SIZE);
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
-  private lastBpm: number | null = null;
   private smoothedBpm: number | null = null;
   private frameCount = 0;
 
@@ -86,11 +89,12 @@ export class RppgDetector {
   }
 
   computeBpm(): BpmResult | null {
-    if (this.buffer.length < 90) return null;
+    if (this.buffer.length < MIN_SAMPLES) return null;
 
     const raw = this.buffer.toArray();
     const detrended = detrend(raw);
-    const windowed = hammingWindow(detrended);
+    const filtered = bandpassFilter(detrended, CAMERA_FPS, BPM_FREQ_MIN, BPM_FREQ_MAX);
+    const windowed = hammingWindow(filtered);
 
     const n = nextPowerOf2(windowed.length);
     const re = new Float64Array(n);
@@ -101,7 +105,7 @@ export class RppgDetector {
     const spectrum = magnitudeSpectrum(re, im);
 
     const peak = findDominantPeak(spectrum, CAMERA_FPS, BPM_FREQ_MIN, BPM_FREQ_MAX);
-    if (!peak) return null;
+    if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
 
     const rawBpm = peak.frequency * 60;
     if (rawBpm < BPM_MIN || rawBpm > BPM_MAX) return null;
@@ -109,14 +113,12 @@ export class RppgDetector {
     if (this.smoothedBpm === null) {
       this.smoothedBpm = rawBpm;
     } else {
-      const alpha = peak.confidence > 0.15 ? 0.3 : 0.1;
+      const alpha = peak.confidence > 0.2 ? 0.3 : 0.15;
       this.smoothedBpm = this.smoothedBpm * (1 - alpha) + rawBpm * alpha;
     }
 
-    this.lastBpm = Math.round(this.smoothedBpm);
-
     return {
-      bpm: this.lastBpm,
+      bpm: Math.round(this.smoothedBpm),
       confidence: peak.confidence,
       signal: detrended,
     };
@@ -132,7 +134,6 @@ export class RppgDetector {
 
   reset(): void {
     this.buffer.clear();
-    this.lastBpm = null;
     this.smoothedBpm = null;
     this.frameCount = 0;
   }
