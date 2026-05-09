@@ -1,4 +1,3 @@
-export type AppMode = 'landing' | 'live' | 'breathe' | 'check';
 export type AppStatus =
   | 'idle'
   | 'requesting-camera'
@@ -7,9 +6,9 @@ export type AppStatus =
   | 'active'
   | 'error';
 
-export type BreathPattern = '4-7-8' | 'box' | 'coherence';
+export type Classification = 'relaxed' | 'moderate' | 'elevated';
 
-let _mode = $state<AppMode>('landing');
+let _started = $state(false);
 let _status = $state<AppStatus>('idle');
 let _error = $state<string | null>(null);
 
@@ -18,27 +17,23 @@ let _bpmConfidence = $state(0);
 let _breathingRate = $state<number | null>(null);
 let _amplification = $state(5);
 
+let _avgBpm = $state<number | null>(null);
+let _bpmVariability = $state<number | null>(null);
+let _classification = $state<Classification | null>(null);
+
 let _faceDetected = $state(false);
 let _modelLoaded = $state(false);
 let _cameraActive = $state(false);
 let _calibrationProgress = $state(0);
 
-let _breathPattern = $state<BreathPattern>('4-7-8');
-let _breathPhase = $state<'inhale' | 'hold' | 'exhale' | 'idle'>('idle');
-let _breathSynced = $state(false);
-let _sessionTime = $state(0);
-
 let _waveformSignal = $state<Float64Array>(new Float64Array(0));
 
-let _checkTimeRemaining = $state(60);
-let _checkActive = $state(false);
-
 export const appState = {
-  get mode() {
-    return _mode;
+  get started() {
+    return _started;
   },
-  set mode(v: AppMode) {
-    _mode = v;
+  set started(v: boolean) {
+    _started = v;
   },
 
   get status() {
@@ -83,6 +78,27 @@ export const appState = {
     _amplification = v;
   },
 
+  get avgBpm() {
+    return _avgBpm;
+  },
+  set avgBpm(v: number | null) {
+    _avgBpm = v;
+  },
+
+  get bpmVariability() {
+    return _bpmVariability;
+  },
+  set bpmVariability(v: number | null) {
+    _bpmVariability = v;
+  },
+
+  get classification() {
+    return _classification;
+  },
+  set classification(v: Classification | null) {
+    _classification = v;
+  },
+
   get faceDetected() {
     return _faceDetected;
   },
@@ -111,34 +127,6 @@ export const appState = {
     _calibrationProgress = v;
   },
 
-  get breathPattern() {
-    return _breathPattern;
-  },
-  set breathPattern(v: BreathPattern) {
-    _breathPattern = v;
-  },
-
-  get breathPhase() {
-    return _breathPhase;
-  },
-  set breathPhase(v: 'inhale' | 'hold' | 'exhale' | 'idle') {
-    _breathPhase = v;
-  },
-
-  get breathSynced() {
-    return _breathSynced;
-  },
-  set breathSynced(v: boolean) {
-    _breathSynced = v;
-  },
-
-  get sessionTime() {
-    return _sessionTime;
-  },
-  set sessionTime(v: number) {
-    _sessionTime = v;
-  },
-
   get waveformSignal() {
     return _waveformSignal;
   },
@@ -146,31 +134,15 @@ export const appState = {
     _waveformSignal = v;
   },
 
-  get checkTimeRemaining() {
-    return _checkTimeRemaining;
-  },
-  set checkTimeRemaining(v: number) {
-    _checkTimeRemaining = v;
-  },
-
-  get checkActive() {
-    return _checkActive;
-  },
-  set checkActive(v: boolean) {
-    _checkActive = v;
-  },
-
   reset() {
     _bpm = null;
     _bpmConfidence = 0;
     _breathingRate = null;
+    _avgBpm = null;
+    _bpmVariability = null;
+    _classification = null;
     _faceDetected = false;
     _calibrationProgress = 0;
-    _breathPhase = 'idle';
-    _breathSynced = false;
-    _sessionTime = 0;
     _waveformSignal = new Float64Array(0);
-    _checkTimeRemaining = 60;
-    _checkActive = false;
   },
 };

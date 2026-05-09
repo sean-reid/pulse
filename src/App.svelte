@@ -35,7 +35,7 @@
     try {
       cameraResult = await requestCamera();
       appState.cameraActive = true;
-      appState.mode = 'live';
+      appState.started = true;
     } catch (err: unknown) {
       const cameraError = (err as { type: CameraError }).type || 'unknown';
       errorMessage = getErrorMessage(cameraError);
@@ -46,7 +46,7 @@
   function handleRetry() {
     errorMessage = null;
     appState.status = 'idle';
-    appState.mode = 'landing';
+    appState.started = false;
   }
 
   $effect(() => {
@@ -58,7 +58,7 @@
   });
 </script>
 
-{#if appState.mode === 'landing' && appState.status !== 'error'}
+{#if !appState.started && appState.status !== 'error'}
   <Onboarding onStart={handleStart} />
 {/if}
 
@@ -66,6 +66,6 @@
   <ErrorBanner message={errorMessage} onRetry={handleRetry} />
 {/if}
 
-{#if cameraResult && appState.mode !== 'landing'}
+{#if cameraResult && appState.started}
   <CameraView video={cameraResult.video} />
 {/if}

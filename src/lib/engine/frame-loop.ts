@@ -17,7 +17,7 @@ import {
 import { RppgDetector } from '../detection/rppg';
 import { BreathingDetector } from '../detection/breathing';
 import { iirCoefficient } from '../utils/math';
-import { appState } from '../stores/app-state.svelte';
+import { appState, type Classification } from '../stores/app-state.svelte';
 import {
   AMP_FREQ_MIN,
   AMP_FREQ_MAX,
@@ -27,6 +27,8 @@ import {
   BREATH_DETECT_INTERVAL,
   CALIBRATION_FRAMES,
 } from '../utils/constants';
+
+const MAX_HISTORY = 60;
 
 export interface FrameLoop {
   start: () => void;
@@ -45,6 +47,27 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   const breathing = new BreathingDetector();
   let currentROIs: FaceROIs | null = null;
   let calibrationFrames = 0;
+  const bpmHistory: number[] = [];
+
+  function updateRollingStats(bpm: number) {
+    bpmHistory.push(bpm);
+    if (bpmHistory.length > MAX_HISTORY) bpmHistory.shift();
+    if (bpmHistory.length < 3) return;
+
+    const avg = bpmHistory.reduce((a, b) => a + b, 0) / bpmHistory.length;
+    const variance =
+      bpmHistory.reduce((sum, v) => sum + (v - avg) ** 2, 0) / (bpmHistory.length - 1);
+    const stdDev = Math.sqrt(variance);
+
+    appState.avgBpm = Math.round(avg);
+    appState.bpmVariability = Math.round(stdDev * 10) / 10;
+
+    let cls: Classification;
+    if (avg < 72 && stdDev < 8) cls = 'relaxed';
+    else if (avg > 90 || stdDev > 15) cls = 'elevated';
+    else cls = 'moderate';
+    appState.classification = cls;
+  }
 
   function init() {
     renderer = initRenderer(canvas, video.videoWidth, video.videoHeight);
@@ -53,9 +76,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       if (msg.includes('ready')) {
         appState.modelLoaded = true;
       }
-    }).catch(() => {
-      // Face detection failed to load - app still works for motion amp
-    });
+    }).catch(() => {});
   }
 
   function loop() {
@@ -114,6 +135,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
             appState.bpm = bpmResult.bpm;
             appState.bpmConfidence = bpmResult.confidence;
             appState.waveformSignal = bpmResult.signal;
+            updateRollingStats(bpmResult.bpm);
           }
 
           const breathResult = breathing.computeBreathingRate();
@@ -152,6 +174,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       calibrationFrames = 0;
       frameCount = 0;
       lastVideoTime = -1;
+      bpmHistory.length = 0;
     },
   };
 }

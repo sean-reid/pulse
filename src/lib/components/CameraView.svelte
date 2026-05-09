@@ -2,9 +2,6 @@
   import { appState } from '../stores/app-state.svelte';
   import { createFrameLoop, type FrameLoop } from '../engine/frame-loop';
   import LoadingOverlay from './LoadingOverlay.svelte';
-  import ModeSelector from './ModeSelector.svelte';
-  import BreathGuide from './BreathGuide.svelte';
-  import CheckMode from './CheckMode.svelte';
   import WaveformGraph from './WaveformGraph.svelte';
   import { MIN_AMPLIFICATION, MAX_AMPLIFICATION } from '../utils/constants';
 
@@ -36,11 +33,15 @@
   let beatDuration = $derived(appState.bpm ? 60 / appState.bpm : 1);
   let showVitals = $derived(appState.bpm !== null && appState.status === 'active');
   let showBreathing = $derived(appState.breathingRate !== null && appState.status === 'active');
+  let showStats = $derived(appState.avgBpm !== null && appState.status === 'active');
+
+  const classLabels = { relaxed: 'Relaxed', moderate: 'Moderate', elevated: 'Elevated' };
+  const classColors = { relaxed: 'text-green', moderate: 'text-amber', elevated: 'text-accent' };
 </script>
 
 <div class="fixed inset-0 bg-bg-primary flex flex-col">
   <div
-    class="flex-1 flex flex-col items-center justify-start gap-5 px-4 pt-5 pb-2 overflow-hidden
+    class="flex-1 flex flex-col items-center justify-start gap-5 px-4 pt-5 pb-6 overflow-hidden
               sm:pt-8 sm:gap-6"
   >
     <!-- Camera -->
@@ -62,7 +63,7 @@
       </div>
     </div>
 
-    <!-- Vitals -->
+    <!-- Current vitals -->
     <div class="flex flex-col items-center gap-3 flex-shrink-0">
       {#if showVitals}
         <div class="flex items-center gap-6">
@@ -99,12 +100,26 @@
     <!-- Waveform -->
     <WaveformGraph signal={appState.waveformSignal} height={64} />
 
-    <!-- Mode-specific content -->
-    <BreathGuide />
-    <CheckMode />
+    <!-- Rolling stats -->
+    {#if showStats}
+      <div class="w-full max-w-sm flex items-center justify-between text-sm px-2">
+        <div>
+          <span class="text-text-tertiary text-xs">Avg</span>
+          <span class="text-text-primary tabular-nums ml-1">{appState.avgBpm}</span>
+          <span class="text-text-tertiary text-xs ml-0.5">bpm</span>
+        </div>
+        <div>
+          <span class="text-text-tertiary text-xs">Variability</span>
+          <span class="text-text-primary tabular-nums ml-1">{appState.bpmVariability}</span>
+        </div>
+        {#if appState.classification}
+          <span class="{classColors[appState.classification]} text-sm font-medium">
+            {classLabels[appState.classification]}
+          </span>
+        {/if}
+      </div>
+    {/if}
   </div>
-
-  <ModeSelector />
 </div>
 
 <style>
