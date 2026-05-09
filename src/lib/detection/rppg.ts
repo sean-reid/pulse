@@ -34,8 +34,46 @@ export interface BpmResult {
 const MIN_SAMPLES = 150;
 const MIN_CONFIDENCE = 0.08;
 
+/** CHROM sliding window size (~2 seconds at 30fps) */
+const CHROM_WINDOW = 64;
+
+/**
+ * Skin pixel detection using normalized rgb chrominance.
+ * Returns true if the pixel is likely skin-colored.
+ */
+function isSkinPixel(r: number, g: number, b: number): boolean {
+  const sum = r + g + b;
+  if (sum < 60) return false; // too dark to classify
+  const rn = r / sum;
+  const gn = g / sum;
+  return rn > 0.35 && rn < 0.6 && gn > 0.25 && gn < 0.4;
+}
+
+/**
+ * Compute mean and standard deviation of a Float64Array segment.
+ */
+function meanAndStd(
+  arr: Float64Array,
+  start: number,
+  length: number,
+): { mean: number; std: number } {
+  let sum = 0;
+  for (let i = start; i < start + length; i++) {
+    sum += arr[i];
+  }
+  const mean = sum / length;
+  let variance = 0;
+  for (let i = start; i < start + length; i++) {
+    const d = arr[i] - mean;
+    variance += d * d;
+  }
+  return { mean, std: Math.sqrt(variance / length) };
+}
+
 export class RppgDetector {
-  private buffer = new RingBuffer(SIGNAL_BUFFER_SIZE);
+  private bufferR = new RingBuffer(SIGNAL_BUFFER_SIZE);
+  private bufferG = new RingBuffer(SIGNAL_BUFFER_SIZE);
+  private bufferB = new RingBuffer(SIGNAL_BUFFER_SIZE);
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
   private smoothedBpm: number | null = null;
@@ -47,7 +85,9 @@ export class RppgDetector {
   }
 
   sampleFrame(video: HTMLVideoElement, rois: ROI[]): void {
-    let totalGreen = 0;
+    let totalR = 0;
+    let totalG = 0;
+    let totalB = 0;
     let totalCount = 0;
 
     for (const roi of rois) {
@@ -75,24 +115,84 @@ export class RppgDetector {
         const r = pixels[i];
         const g = pixels[i + 1];
         const b = pixels[i + 2];
-        if (r > 40 && g > 40 && b > 20 && r < 250) {
-          totalGreen += g;
+        if (isSkinPixel(r, g, b)) {
+          totalR += r;
+          totalG += g;
+          totalB += b;
           totalCount++;
         }
       }
     }
 
     if (totalCount > 0) {
-      this.buffer.push(totalGreen / totalCount);
+      this.bufferR.push(totalR / totalCount);
+      this.bufferG.push(totalG / totalCount);
+      this.bufferB.push(totalB / totalCount);
     }
     this.frameCount++;
   }
 
-  computeBpm(): BpmResult | null {
-    if (this.buffer.length < MIN_SAMPLES) return null;
+  /**
+   * Apply the CHROM algorithm (De Haan & Jelichen, 2013) to extract
+   * a motion-canceled pulse signal from the RGB channel buffers.
+   *
+   * For each overlapping window of CHROM_WINDOW frames:
+   *   1. Normalize each channel to zero-mean, unit-variance
+   *   2. Build two chrominance signals:
+   *      Xs = 3*Rn - 2*Gn   (motion-sensitive)
+   *      Ys = 1.5*Rn + Gn - 1.5*Bn  (pulse-sensitive)
+   *   3. Compute alpha = std(Xs) / std(Ys)
+   *   4. pulse = Xs - alpha * Ys  (motion-canceled)
+   *   5. Overlap-add the windowed pulse segment to the output
+   */
+  private computeChromPulse(): Float64Array {
+    const rArr = this.bufferR.toArray();
+    const gArr = this.bufferG.toArray();
+    const bArr = this.bufferB.toArray();
+    const len = rArr.length;
+    const pulse = new Float64Array(len);
 
-    const raw = this.buffer.toArray();
-    const detrended = detrend(raw);
+    for (let start = 0; start <= len - CHROM_WINDOW; start++) {
+      const rStats = meanAndStd(rArr, start, CHROM_WINDOW);
+      const gStats = meanAndStd(gArr, start, CHROM_WINDOW);
+      const bStats = meanAndStd(bArr, start, CHROM_WINDOW);
+
+      // Avoid division by zero on flat signals
+      const rStd = rStats.std > 1e-10 ? rStats.std : 1;
+      const gStd = gStats.std > 1e-10 ? gStats.std : 1;
+      const bStd = bStats.std > 1e-10 ? bStats.std : 1;
+
+      // Build Xs and Ys over this window to compute alpha
+      const xs = new Float64Array(CHROM_WINDOW);
+      const ys = new Float64Array(CHROM_WINDOW);
+
+      for (let j = 0; j < CHROM_WINDOW; j++) {
+        const idx = start + j;
+        const rn = (rArr[idx] - rStats.mean) / rStd;
+        const gn = (gArr[idx] - gStats.mean) / gStd;
+        const bn = (bArr[idx] - bStats.mean) / bStd;
+        xs[j] = 3 * rn - 2 * gn;
+        ys[j] = 1.5 * rn + gn - 1.5 * bn;
+      }
+
+      const xsStats = meanAndStd(xs, 0, CHROM_WINDOW);
+      const ysStats = meanAndStd(ys, 0, CHROM_WINDOW);
+      const alpha = ysStats.std > 1e-10 ? xsStats.std / ysStats.std : 0;
+
+      // Overlap-add: accumulate the motion-canceled signal
+      for (let j = 0; j < CHROM_WINDOW; j++) {
+        pulse[start + j] += (xs[j] - alpha * ys[j]) / CHROM_WINDOW;
+      }
+    }
+
+    return pulse;
+  }
+
+  computeBpm(): BpmResult | null {
+    if (this.bufferG.length < MIN_SAMPLES) return null;
+
+    const chromPulse = this.computeChromPulse();
+    const detrended = detrend(chromPulse);
     const filtered = bandpassFilter(detrended, CAMERA_FPS, BPM_FREQ_MIN, BPM_FREQ_MAX);
     const windowed = hammingWindow(filtered);
 
@@ -125,15 +225,17 @@ export class RppgDetector {
   }
 
   getSignal(): Float64Array {
-    return this.buffer.toArray();
+    return this.bufferG.toArray();
   }
 
   get sampleCount(): number {
-    return this.buffer.length;
+    return this.bufferG.length;
   }
 
   reset(): void {
-    this.buffer.clear();
+    this.bufferR.clear();
+    this.bufferG.clear();
+    this.bufferB.clear();
     this.smoothedBpm = null;
     this.frameCount = 0;
   }

@@ -33,28 +33,16 @@ export class RingBuffer {
 }
 
 export function detrend(signal: Float64Array): Float64Array {
+  // Subtract a moving average (window = ~2 seconds = 60 samples at 30fps)
+  const windowSize = 60;
   const n = signal.length;
   const result = new Float64Array(n);
-  let sumX = 0,
-    sumY = 0,
-    sumXY = 0,
-    sumXX = 0;
   for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += signal[i];
-    sumXY += i * signal[i];
-    sumXX += i * i;
-  }
-  const denom = n * sumXX - sumX * sumX;
-  if (Math.abs(denom) < 1e-10) {
-    const mean = sumY / n;
-    for (let i = 0; i < n; i++) result[i] = signal[i] - mean;
-    return result;
-  }
-  const slope = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-  for (let i = 0; i < n; i++) {
-    result[i] = signal[i] - (slope * i + intercept);
+    const lo = Math.max(0, i - Math.floor(windowSize / 2));
+    const hi = Math.min(n, i + Math.ceil(windowSize / 2));
+    let sum = 0;
+    for (let j = lo; j < hi; j++) sum += signal[j];
+    result[i] = signal[i] - sum / (hi - lo);
   }
   return result;
 }
@@ -150,6 +138,20 @@ export function findDominantPeak(
   }
 
   if (peakMag < 1e-10) return null;
+
+  // Noise floor rejection: reject if peak power < 2x median spectral power in passband
+  const bandSize = hi - lo + 1;
+  const bandValues = new Float64Array(bandSize);
+  for (let i = 0; i < bandSize; i++) {
+    bandValues[i] = spectrum[lo + i];
+  }
+  const sorted = new Float64Array(bandValues);
+  sorted.sort();
+  const median =
+    bandSize % 2 === 1
+      ? sorted[Math.floor(bandSize / 2)]
+      : (sorted[bandSize / 2 - 1] + sorted[bandSize / 2]) / 2;
+  if (peakMag < 2 * median) return null;
 
   let refinedBin = peakBin;
   if (peakBin > lo && peakBin < hi) {

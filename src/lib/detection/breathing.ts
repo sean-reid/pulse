@@ -24,7 +24,7 @@ export interface BreathResult {
   confidence: number;
 }
 
-const MIN_SAMPLES = 150;
+const MIN_SAMPLES = 180;
 const MIN_CONFIDENCE = 0.06;
 
 export class BreathingDetector {

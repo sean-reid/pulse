@@ -41,12 +41,16 @@ describe('RingBuffer', () => {
 });
 
 describe('detrend', () => {
-  it('removes linear trend', () => {
+  it('removes slow drift via moving-average subtraction', () => {
+    // Short signal: window (60) exceeds length, so moving average = global mean
     const signal = new Float64Array([1, 2, 3, 4, 5]);
     const result = detrend(signal);
-    for (const val of result) {
-      expect(Math.abs(val)).toBeLessThan(1e-10);
-    }
+    // Mean is 3, so result should be [-2, -1, 0, 1, 2]
+    expect(result[0]).toBeCloseTo(-2, 10);
+    expect(result[1]).toBeCloseTo(-1, 10);
+    expect(result[2]).toBeCloseTo(0, 10);
+    expect(result[3]).toBeCloseTo(1, 10);
+    expect(result[4]).toBeCloseTo(2, 10);
   });
 
   it('removes DC offset', () => {
@@ -55,6 +59,21 @@ describe('detrend', () => {
     for (const val of result) {
       expect(Math.abs(val)).toBeLessThan(1e-10);
     }
+  });
+
+  it('removes local trend on longer signals', () => {
+    // Create a signal with a slow nonlinear drift + a fast oscillation
+    const n = 256;
+    const signal = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      // slow drift (period >> window) + fast oscillation
+      signal[i] = 50 * Math.sin((2 * Math.PI * i) / 300) + Math.sin((2 * Math.PI * 5 * i) / n);
+    }
+    const result = detrend(signal);
+    // The mean of the detrended signal should be near zero
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += result[i];
+    expect(Math.abs(sum / n)).toBeLessThan(1);
   });
 });
 
