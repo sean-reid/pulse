@@ -63,8 +63,10 @@ export interface RendererState {
   motionAmpProgram: WebGLProgram;
   motionAmpInitProgram: WebGLProgram;
   videoTexture: WebGLTexture;
-  iirLow1Textures: [WebGLTexture, WebGLTexture];
-  iirLow2Textures: [WebGLTexture, WebGLTexture];
+  pulseLow1Textures: [WebGLTexture, WebGLTexture];
+  pulseLow2Textures: [WebGLTexture, WebGLTexture];
+  breathLow1Textures: [WebGLTexture, WebGLTexture];
+  breathLow2Textures: [WebGLTexture, WebGLTexture];
   displayTextures: [WebGLTexture, WebGLTexture];
   maskTexture: WebGLTexture;
   framebuffers: [WebGLFramebuffer, WebGLFramebuffer];
@@ -86,10 +88,7 @@ export function initRenderer(
   });
   if (!gl) throw new Error('WebGL2 not supported');
 
-  const ext = gl.getExtension('EXT_color_buffer_float');
-  if (!ext) {
-    // Fall back to RGBA8 (already default)
-  }
+  gl.getExtension('EXT_color_buffer_float');
 
   canvas.width = width;
   canvas.height = height;
@@ -101,11 +100,19 @@ export function initRenderer(
 
   const videoTexture = createTexture(gl, width, height);
 
-  const iirLow1Textures: [WebGLTexture, WebGLTexture] = [
+  const pulseLow1Textures: [WebGLTexture, WebGLTexture] = [
     createTexture(gl, width, height),
     createTexture(gl, width, height),
   ];
-  const iirLow2Textures: [WebGLTexture, WebGLTexture] = [
+  const pulseLow2Textures: [WebGLTexture, WebGLTexture] = [
+    createTexture(gl, width, height),
+    createTexture(gl, width, height),
+  ];
+  const breathLow1Textures: [WebGLTexture, WebGLTexture] = [
+    createTexture(gl, width, height),
+    createTexture(gl, width, height),
+  ];
+  const breathLow2Textures: [WebGLTexture, WebGLTexture] = [
     createTexture(gl, width, height),
     createTexture(gl, width, height),
   ];
@@ -154,8 +161,10 @@ export function initRenderer(
     motionAmpProgram,
     motionAmpInitProgram,
     videoTexture,
-    iirLow1Textures,
-    iirLow2Textures,
+    pulseLow1Textures,
+    pulseLow2Textures,
+    breathLow1Textures,
+    breathLow2Textures,
     displayTextures,
     maskTexture,
     framebuffers,
@@ -177,15 +186,27 @@ export function uploadMask(state: RendererState, maskCanvas: OffscreenCanvas): v
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, maskCanvas);
 }
 
-export function renderMotionAmp(
-  state: RendererState,
-  alpha1: number,
-  alpha2: number,
-  amplification: number,
-): void {
+export interface AmpParams {
+  pulseAlpha1: number;
+  pulseAlpha2: number;
+  breathAlpha1: number;
+  breathAlpha2: number;
+  pulseAmp: number;
+  breathAmp: number;
+}
+
+export function renderMotionAmp(state: RendererState, params: AmpParams): void {
   const { gl, quadVAO, width, height } = state;
   const curr = state.pingPongIndex;
   const next = 1 - curr;
+
+  const drawBuffers = [
+    gl.COLOR_ATTACHMENT0,
+    gl.COLOR_ATTACHMENT1,
+    gl.COLOR_ATTACHMENT2,
+    gl.COLOR_ATTACHMENT3,
+    gl.COLOR_ATTACHMENT4,
+  ];
 
   if (!state.initialized) {
     gl.useProgram(state.motionAmpInitProgram);
@@ -201,17 +222,31 @@ export function renderMotionAmp(
       gl.FRAMEBUFFER,
       gl.COLOR_ATTACHMENT1,
       gl.TEXTURE_2D,
-      state.iirLow1Textures[next],
+      state.pulseLow1Textures[next],
       0,
     );
     gl.framebufferTexture2D(
       gl.FRAMEBUFFER,
       gl.COLOR_ATTACHMENT2,
       gl.TEXTURE_2D,
-      state.iirLow2Textures[next],
+      state.pulseLow2Textures[next],
       0,
     );
-    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT3,
+      gl.TEXTURE_2D,
+      state.breathLow1Textures[next],
+      0,
+    );
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT4,
+      gl.TEXTURE_2D,
+      state.breathLow2Textures[next],
+      0,
+    );
+    gl.drawBuffers(drawBuffers);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, state.videoTexture);
@@ -241,37 +276,62 @@ export function renderMotionAmp(
     gl.FRAMEBUFFER,
     gl.COLOR_ATTACHMENT1,
     gl.TEXTURE_2D,
-    state.iirLow1Textures[next],
+    state.pulseLow1Textures[next],
     0,
   );
   gl.framebufferTexture2D(
     gl.FRAMEBUFFER,
     gl.COLOR_ATTACHMENT2,
     gl.TEXTURE_2D,
-    state.iirLow2Textures[next],
+    state.pulseLow2Textures[next],
     0,
   );
-  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    gl.COLOR_ATTACHMENT3,
+    gl.TEXTURE_2D,
+    state.breathLow1Textures[next],
+    0,
+  );
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    gl.COLOR_ATTACHMENT4,
+    gl.TEXTURE_2D,
+    state.breathLow2Textures[next],
+    0,
+  );
+  gl.drawBuffers(drawBuffers);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, state.videoTexture);
   gl.uniform1i(gl.getUniformLocation(program, 'u_currentFrame'), 0);
 
   gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, state.iirLow1Textures[curr]);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_iirLow1'), 1);
+  gl.bindTexture(gl.TEXTURE_2D, state.pulseLow1Textures[curr]);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_pulseLow1'), 1);
 
   gl.activeTexture(gl.TEXTURE2);
-  gl.bindTexture(gl.TEXTURE_2D, state.iirLow2Textures[curr]);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_iirLow2'), 2);
+  gl.bindTexture(gl.TEXTURE_2D, state.pulseLow2Textures[curr]);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_pulseLow2'), 2);
 
   gl.activeTexture(gl.TEXTURE3);
-  gl.bindTexture(gl.TEXTURE_2D, state.maskTexture);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_mask'), 3);
+  gl.bindTexture(gl.TEXTURE_2D, state.breathLow1Textures[curr]);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_breathLow1'), 3);
 
-  gl.uniform1f(gl.getUniformLocation(program, 'u_alpha1'), alpha1);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_alpha2'), alpha2);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_amplification'), amplification);
+  gl.activeTexture(gl.TEXTURE4);
+  gl.bindTexture(gl.TEXTURE_2D, state.breathLow2Textures[curr]);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_breathLow2'), 4);
+
+  gl.activeTexture(gl.TEXTURE5);
+  gl.bindTexture(gl.TEXTURE_2D, state.maskTexture);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_mask'), 5);
+
+  gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAlpha1'), params.pulseAlpha1);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAlpha2'), params.pulseAlpha2);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha1'), params.breathAlpha1);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha2'), params.breathAlpha2);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAmp'), params.pulseAmp);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_breathAmp'), params.breathAmp);
 
   gl.viewport(0, 0, width, height);
   gl.bindVertexArray(quadVAO);
@@ -304,8 +364,10 @@ export function destroyRenderer(state: RendererState): void {
   gl.deleteProgram(state.motionAmpInitProgram);
   gl.deleteTexture(state.videoTexture);
   gl.deleteTexture(state.maskTexture);
-  for (const t of state.iirLow1Textures) gl.deleteTexture(t);
-  for (const t of state.iirLow2Textures) gl.deleteTexture(t);
+  for (const t of state.pulseLow1Textures) gl.deleteTexture(t);
+  for (const t of state.pulseLow2Textures) gl.deleteTexture(t);
+  for (const t of state.breathLow1Textures) gl.deleteTexture(t);
+  for (const t of state.breathLow2Textures) gl.deleteTexture(t);
   for (const t of state.displayTextures) gl.deleteTexture(t);
   for (const fb of state.framebuffers) gl.deleteFramebuffer(fb);
   gl.deleteVertexArray(state.quadVAO);

@@ -7,8 +7,8 @@ export const BPM_MAX = 200;
 export const BPM_FREQ_MIN = BPM_MIN / 60;
 export const BPM_FREQ_MAX = BPM_MAX / 60;
 
-export const AMP_FREQ_MIN = 0.8;
-export const AMP_FREQ_MAX = 2.5;
+export const AMP_FREQ_MIN = BPM_FREQ_MIN;
+export const AMP_FREQ_MAX = BPM_FREQ_MAX;
 
 export const BREATH_FREQ_MIN = 0.1;
 export const BREATH_FREQ_MAX = 0.6;
@@ -18,9 +18,7 @@ export const BREATH_MAX = BREATH_FREQ_MAX * 60;
 export const SIGNAL_BUFFER_SIZE = 256;
 export const BPM_UPDATE_INTERVAL = 60;
 export const FACE_DETECT_INTERVAL = 3;
-export const BREATH_DETECT_INTERVAL = 5;
 
-export const DEFAULT_AMPLIFICATION = 5;
 export const MAX_AMPLIFICATION = 30;
 export const MIN_AMPLIFICATION = 0;
 

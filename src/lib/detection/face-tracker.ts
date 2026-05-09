@@ -88,6 +88,7 @@ export interface FaceROIs {
   rightCheek: ROI;
   chest: ROI;
   oval: FaceOvalPoint[];
+  breathLandmarkY: number;
 }
 
 export function detectFace(video: HTMLVideoElement, timestamp: number): FaceROIs | null {
@@ -120,7 +121,14 @@ export function detectFace(video: HTMLVideoElement, timestamp: number): FaceROIs
 
   const oval = getFaceOval(landmarks, w, h);
 
-  return { forehead, leftCheek, rightCheek, chest, oval };
+  const breathIndices = [4, 6, 152];
+  let breathY = 0;
+  for (const idx of breathIndices) {
+    breathY += landmarks[idx].y * h;
+  }
+  breathY /= breathIndices.length;
+
+  return { forehead, leftCheek, rightCheek, chest, oval, breathLandmarkY: breathY };
 }
 
 function getFaceOval(landmarks: Landmark[], w: number, h: number): FaceOvalPoint[] {

@@ -10,7 +10,6 @@ import {
 } from './signal';
 import type { ROI } from './rppg';
 import {
-  SIGNAL_BUFFER_SIZE,
   BREATH_FREQ_MIN,
   BREATH_FREQ_MAX,
   BREATH_MIN,
@@ -19,27 +18,35 @@ import {
   ROI_SAMPLE_SIZE,
 } from '../utils/constants';
 
-export interface BreathResult {
+export interface BreathEstimate {
   rate: number;
   confidence: number;
+  source: 'motion' | 'landmark';
 }
 
-const MIN_SAMPLES = 180;
-const MIN_CONFIDENCE = 0.06;
+const MOTION_BUFFER_SIZE = 900;
+const LANDMARK_BUFFER_SIZE = 300;
+const MIN_MOTION_SAMPLES = 240;
+const MIN_LANDMARK_SAMPLES = 80;
+const MIN_CONFIDENCE = 0.04;
+const MOTION_DETREND_WINDOW = 150;
+const LANDMARK_DETREND_WINDOW = 50;
 
 export class BreathingDetector {
-  private buffer = new RingBuffer(SIGNAL_BUFFER_SIZE);
+  private motionBuffer = new RingBuffer(MOTION_BUFFER_SIZE);
+  private landmarkBuffer = new RingBuffer(LANDMARK_BUFFER_SIZE);
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
   private prevPixels: Uint8ClampedArray | null = null;
-  private smoothedRate: number | null = null;
+  private landmarkSampleRate: number;
 
-  constructor() {
+  constructor(landmarkSampleRate: number) {
+    this.landmarkSampleRate = landmarkSampleRate;
     this.sampleCanvas = new OffscreenCanvas(ROI_SAMPLE_SIZE, ROI_SAMPLE_SIZE);
     this.sampleCtx = this.sampleCanvas.getContext('2d', { willReadFrequently: true })!;
   }
 
-  sampleFrame(video: HTMLVideoElement, chestROI: ROI): void {
+  sampleMotion(video: HTMLVideoElement, chestROI: ROI): void {
     const { sampleCtx, sampleCanvas } = this;
 
     if (chestROI.width <= 0 || chestROI.height <= 0) return;
@@ -66,21 +73,30 @@ export class BreathingDetector {
         motionEnergy += dg * dg;
       }
       motionEnergy /= pixels.length / 4;
-      this.buffer.push(Math.sqrt(motionEnergy));
+      this.motionBuffer.push(Math.sqrt(motionEnergy));
     }
 
     this.prevPixels = new Uint8ClampedArray(pixels);
   }
 
-  computeBreathingRate(): BreathResult | null {
-    if (this.buffer.length < MIN_SAMPLES) return null;
+  sampleLandmarks(breathLandmarkY: number): void {
+    this.landmarkBuffer.push(breathLandmarkY);
+  }
 
-    const raw = this.buffer.toArray();
-    const detrended = detrend(raw);
-    const filtered = bandpassFilter(detrended, CAMERA_FPS, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
+  private analyzeSignal(
+    buffer: RingBuffer,
+    minSamples: number,
+    sampleRate: number,
+    detrendWindow: number,
+  ): { rate: number; confidence: number } | null {
+    if (buffer.length < minSamples) return null;
+
+    const raw = buffer.toArray();
+    const detrended = detrend(raw, detrendWindow);
+    const filtered = bandpassFilter(detrended, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
     const windowed = hammingWindow(filtered);
 
-    const n = nextPowerOf2(windowed.length);
+    const n = nextPowerOf2(windowed.length * 4);
     const re = new Float64Array(n);
     const im = new Float64Array(n);
     re.set(windowed);
@@ -88,27 +104,44 @@ export class BreathingDetector {
     fft(re, im);
     const spectrum = magnitudeSpectrum(re, im);
 
-    const peak = findDominantPeak(spectrum, CAMERA_FPS, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
+    const peak = findDominantPeak(spectrum, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
     if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
 
     const rawRate = peak.frequency * 60;
     if (rawRate < BREATH_MIN || rawRate > BREATH_MAX) return null;
 
-    if (this.smoothedRate === null) {
-      this.smoothedRate = rawRate;
-    } else {
-      this.smoothedRate = this.smoothedRate * 0.7 + rawRate * 0.3;
+    return { rate: rawRate, confidence: peak.confidence };
+  }
+
+  getEstimates(): BreathEstimate[] {
+    const estimates: BreathEstimate[] = [];
+
+    const motionResult = this.analyzeSignal(
+      this.motionBuffer,
+      MIN_MOTION_SAMPLES,
+      CAMERA_FPS,
+      MOTION_DETREND_WINDOW,
+    );
+    if (motionResult) {
+      estimates.push({ ...motionResult, source: 'motion' });
     }
 
-    return {
-      rate: Math.round(this.smoothedRate),
-      confidence: peak.confidence,
-    };
+    const landmarkResult = this.analyzeSignal(
+      this.landmarkBuffer,
+      MIN_LANDMARK_SAMPLES,
+      this.landmarkSampleRate,
+      LANDMARK_DETREND_WINDOW,
+    );
+    if (landmarkResult) {
+      estimates.push({ ...landmarkResult, source: 'landmark' });
+    }
+
+    return estimates;
   }
 
   reset(): void {
-    this.buffer.clear();
+    this.motionBuffer.clear();
+    this.landmarkBuffer.clear();
     this.prevPixels = null;
-    this.smoothedRate = null;
   }
 }

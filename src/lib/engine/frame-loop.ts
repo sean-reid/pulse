@@ -1,5 +1,6 @@
 import {
   type RendererState,
+  type AmpParams,
   initRenderer,
   uploadVideoFrame,
   uploadMask,
@@ -16,15 +17,17 @@ import {
 } from '../detection/face-tracker';
 import { RppgDetector } from '../detection/rppg';
 import { BreathingDetector } from '../detection/breathing';
+import { VitalsFusion } from '../detection/vitals-fusion';
 import { iirCoefficient } from '../utils/math';
 import { appState, type Classification } from '../stores/app-state.svelte';
 import {
   AMP_FREQ_MIN,
   AMP_FREQ_MAX,
+  BREATH_FREQ_MIN,
+  BREATH_FREQ_MAX,
   CAMERA_FPS,
   FACE_DETECT_INTERVAL,
   BPM_UPDATE_INTERVAL,
-  BREATH_DETECT_INTERVAL,
   CALIBRATION_FRAMES,
 } from '../utils/constants';
 
@@ -44,7 +47,9 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   let frameCount = 0;
 
   const rppg = new RppgDetector();
-  const breathing = new BreathingDetector();
+  const landmarkSampleRate = CAMERA_FPS / FACE_DETECT_INTERVAL;
+  const breathing = new BreathingDetector(landmarkSampleRate);
+  const fusion = new VitalsFusion();
   let currentROIs: FaceROIs | null = null;
   let calibrationFrames = 0;
   const bpmHistory: number[] = [];
@@ -89,11 +94,16 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
     uploadVideoFrame(renderer, video);
 
-    const alpha1 = iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS);
-    const alpha2 = iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS);
-    const amp = appState.amplification;
+    const ampParams: AmpParams = {
+      pulseAlpha1: iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS),
+      pulseAlpha2: iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS),
+      breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
+      breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
+      pulseAmp: appState.amplification,
+      breathAmp: appState.amplification * 0.4,
+    };
 
-    renderMotionAmp(renderer, alpha1, alpha2, amp);
+    renderMotionAmp(renderer, ampParams);
     renderToScreen(renderer);
 
     if (isLoaded()) {
@@ -105,6 +115,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
           const mask = generateFaceMask(rois.oval, video.videoWidth, video.videoHeight);
           uploadMask(renderer, mask);
+
+          breathing.sampleLandmarks(rois.breathLandmarkY);
         } else {
           appState.faceDetected = false;
         }
@@ -117,9 +129,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
           currentROIs.rightCheek,
         ]);
 
-        if (frameCount % BREATH_DETECT_INTERVAL === 0) {
-          breathing.sampleFrame(video, currentROIs.chest);
-        }
+        breathing.sampleMotion(video, currentROIs.chest);
 
         if (appState.status === 'calibrating') {
           calibrationFrames++;
@@ -130,18 +140,22 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
         }
 
         if (frameCount % BPM_UPDATE_INTERVAL === 0) {
-          const bpmResult = rppg.computeBpm();
-          if (bpmResult) {
-            appState.bpm = bpmResult.bpm;
-            appState.bpmConfidence = bpmResult.confidence;
-            appState.waveformSignal = bpmResult.signal;
-            updateRollingStats(bpmResult.bpm);
+          const rppgResult = rppg.computeBpm();
+          const breathEstimates = breathing.getEstimates();
+          const fused = fusion.update(rppgResult, breathEstimates, performance.now());
+
+          if (fused.bpm !== null) {
+            appState.bpm = fused.bpm;
+            appState.bpmConfidence = fused.bpmConfidence;
+            updateRollingStats(fused.bpm);
           }
 
-          const breathResult = breathing.computeBreathingRate();
-          if (breathResult) {
-            appState.breathingRate = breathResult.rate;
+          if (fused.signal.length > 0) {
+            appState.waveformSignal = fused.signal;
           }
+
+          appState.breathingRate = fused.breathRate;
+          appState.hrv = fused.hrv;
         }
       }
     }
@@ -170,6 +184,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       }
       rppg.reset();
       breathing.reset();
+      fusion.reset();
       currentROIs = null;
       calibrationFrames = 0;
       frameCount = 0;

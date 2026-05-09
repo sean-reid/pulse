@@ -25,33 +25,25 @@ export interface ROI {
   height: number;
 }
 
-export interface BpmResult {
-  bpm: number;
+export interface RppgResult {
+  rawBpm: number;
   confidence: number;
   signal: Float64Array;
+  filteredSignal: Float64Array;
 }
 
 const MIN_SAMPLES = 150;
 const MIN_CONFIDENCE = 0.08;
-
-/** CHROM sliding window size (~2 seconds at 30fps) */
 const CHROM_WINDOW = 64;
 
-/**
- * Skin pixel detection using normalized rgb chrominance.
- * Returns true if the pixel is likely skin-colored.
- */
 function isSkinPixel(r: number, g: number, b: number): boolean {
   const sum = r + g + b;
-  if (sum < 60) return false; // too dark to classify
+  if (sum < 60) return false;
   const rn = r / sum;
   const gn = g / sum;
   return rn > 0.35 && rn < 0.6 && gn > 0.25 && gn < 0.4;
 }
 
-/**
- * Compute mean and standard deviation of a Float64Array segment.
- */
 function meanAndStd(
   arr: Float64Array,
   start: number,
@@ -76,8 +68,6 @@ export class RppgDetector {
   private bufferB = new RingBuffer(SIGNAL_BUFFER_SIZE);
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
-  private smoothedBpm: number | null = null;
-  private frameCount = 0;
 
   constructor() {
     this.sampleCanvas = new OffscreenCanvas(ROI_SAMPLE_SIZE, ROI_SAMPLE_SIZE);
@@ -129,22 +119,8 @@ export class RppgDetector {
       this.bufferG.push(totalG / totalCount);
       this.bufferB.push(totalB / totalCount);
     }
-    this.frameCount++;
   }
 
-  /**
-   * Apply the CHROM algorithm (De Haan & Jelichen, 2013) to extract
-   * a motion-canceled pulse signal from the RGB channel buffers.
-   *
-   * For each overlapping window of CHROM_WINDOW frames:
-   *   1. Normalize each channel to zero-mean, unit-variance
-   *   2. Build two chrominance signals:
-   *      Xs = 3*Rn - 2*Gn   (motion-sensitive)
-   *      Ys = 1.5*Rn + Gn - 1.5*Bn  (pulse-sensitive)
-   *   3. Compute alpha = std(Xs) / std(Ys)
-   *   4. pulse = Xs - alpha * Ys  (motion-canceled)
-   *   5. Overlap-add the windowed pulse segment to the output
-   */
   private computeChromPulse(): Float64Array {
     const rArr = this.bufferR.toArray();
     const gArr = this.bufferG.toArray();
@@ -157,12 +133,10 @@ export class RppgDetector {
       const gStats = meanAndStd(gArr, start, CHROM_WINDOW);
       const bStats = meanAndStd(bArr, start, CHROM_WINDOW);
 
-      // Avoid division by zero on flat signals
       const rStd = rStats.std > 1e-10 ? rStats.std : 1;
       const gStd = gStats.std > 1e-10 ? gStats.std : 1;
       const bStd = bStats.std > 1e-10 ? bStats.std : 1;
 
-      // Build Xs and Ys over this window to compute alpha
       const xs = new Float64Array(CHROM_WINDOW);
       const ys = new Float64Array(CHROM_WINDOW);
 
@@ -179,7 +153,6 @@ export class RppgDetector {
       const ysStats = meanAndStd(ys, 0, CHROM_WINDOW);
       const alpha = ysStats.std > 1e-10 ? xsStats.std / ysStats.std : 0;
 
-      // Overlap-add: accumulate the motion-canceled signal
       for (let j = 0; j < CHROM_WINDOW; j++) {
         pulse[start + j] += (xs[j] - alpha * ys[j]) / CHROM_WINDOW;
       }
@@ -188,7 +161,7 @@ export class RppgDetector {
     return pulse;
   }
 
-  computeBpm(): BpmResult | null {
+  computeBpm(): RppgResult | null {
     if (this.bufferG.length < MIN_SAMPLES) return null;
 
     const chromPulse = this.computeChromPulse();
@@ -210,33 +183,17 @@ export class RppgDetector {
     const rawBpm = peak.frequency * 60;
     if (rawBpm < BPM_MIN || rawBpm > BPM_MAX) return null;
 
-    if (this.smoothedBpm === null) {
-      this.smoothedBpm = rawBpm;
-    } else {
-      const alpha = peak.confidence > 0.2 ? 0.3 : 0.15;
-      this.smoothedBpm = this.smoothedBpm * (1 - alpha) + rawBpm * alpha;
-    }
-
     return {
-      bpm: Math.round(this.smoothedBpm),
+      rawBpm,
       confidence: peak.confidence,
       signal: detrended,
+      filteredSignal: filtered,
     };
-  }
-
-  getSignal(): Float64Array {
-    return this.bufferG.toArray();
-  }
-
-  get sampleCount(): number {
-    return this.bufferG.length;
   }
 
   reset(): void {
     this.bufferR.clear();
     this.bufferG.clear();
     this.bufferB.clear();
-    this.smoothedBpm = null;
-    this.frameCount = 0;
   }
 }

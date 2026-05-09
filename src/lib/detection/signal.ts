@@ -32,9 +32,7 @@ export class RingBuffer {
   }
 }
 
-export function detrend(signal: Float64Array): Float64Array {
-  // Subtract a moving average (window = ~2 seconds = 60 samples at 30fps)
-  const windowSize = 60;
+export function detrend(signal: Float64Array, windowSize = 60): Float64Array {
   const n = signal.length;
   const result = new Float64Array(n);
   for (let i = 0; i < n; i++) {
@@ -211,4 +209,47 @@ export function nextPowerOf2(n: number): number {
   let p = 1;
   while (p < n) p <<= 1;
   return p;
+}
+
+export function findPeaks(signal: Float64Array, minDistance: number): number[] {
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = 0; i < signal.length; i++) {
+    sum += signal[i];
+    sumSq += signal[i] * signal[i];
+  }
+  const mean = sum / signal.length;
+  const std = Math.sqrt(Math.max(0, sumSq / signal.length - mean * mean));
+  const threshold = mean + 0.3 * std;
+
+  const peaks: number[] = [];
+  for (let i = 1; i < signal.length - 1; i++) {
+    if (signal[i] > signal[i - 1] && signal[i] > signal[i + 1] && signal[i] > threshold) {
+      if (peaks.length === 0 || i - peaks[peaks.length - 1] >= minDistance) {
+        const a = signal[i - 1];
+        const b = signal[i];
+        const c = signal[i + 1];
+        const denom = a - 2 * b + c;
+        const offset = Math.abs(denom) > 1e-10 ? (0.5 * (a - c)) / denom : 0;
+        peaks.push(i + (Math.abs(offset) < 0.5 ? offset : 0));
+      }
+    }
+  }
+  return peaks;
+}
+
+export function linearInterpolate(x: number[], y: number[], xNew: Float64Array): Float64Array {
+  const result = new Float64Array(xNew.length);
+  let j = 0;
+  for (let i = 0; i < xNew.length; i++) {
+    while (j < x.length - 2 && x[j + 1] < xNew[i]) j++;
+    if (j >= x.length - 1) {
+      result[i] = y[y.length - 1];
+      continue;
+    }
+    const span = x[j + 1] - x[j];
+    const t = span > 0 ? (xNew[i] - x[j]) / span : 0;
+    result[i] = y[j] + t * (y[j + 1] - y[j]);
+  }
+  return result;
 }

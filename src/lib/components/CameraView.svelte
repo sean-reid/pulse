@@ -34,7 +34,6 @@
   let showVitals = $derived(appState.bpm !== null && appState.status === 'active');
   let showBreathing = $derived(appState.breathingRate !== null && appState.status === 'active');
   let showStats = $derived(appState.avgBpm !== null && appState.status === 'active');
-
   const classLabels = { relaxed: 'Relaxed', moderate: 'Moderate', elevated: 'Elevated' };
   const classColors = { relaxed: 'text-green', moderate: 'text-amber', elevated: 'text-accent' };
 </script>

@@ -6,19 +6,31 @@ See your heartbeat. Real-time pulse and breathing visualization using your camer
 
 ## What it does
 
-Uses your webcam to detect and amplify invisible micro-movements and color changes in your skin, revealing your heartbeat and breathing in real time.
-
-- **Live mode** - Motion-amplified video feed with real-time BPM and breathing rate
-- **Breathe mode** - Guided breathing exercises (4-7-8, box, coherence) with visual biofeedback
-- **Check mode** - 60-second stress assessment with heart rate variability analysis
+Uses your webcam to detect and amplify invisible micro-movements and color changes in your skin, revealing your heartbeat and breathing in real time. Shows continuous rolling stats including BPM, breathing rate, variability, and a live PPG waveform.
 
 ## How it works
 
-- **Motion amplification** via IIR temporal bandpass filtering on the GPU (WebGL2)
-- **Heart rate** from remote photoplethysmography (rPPG) - detecting subtle green channel fluctuations in your forehead skin caused by blood flow
-- **Breathing rate** from frame-differenced motion energy in the chest/shoulder region
-- **Face tracking** via MediaPipe FaceLandmarker for automatic ROI detection
+### Signal acquisition
+- **CHROM algorithm** (De Haan & Jelichen, 2013) extracts pulse signal from RGB chrominance across multiple face ROIs (forehead, cheeks) with skin-pixel filtering
+- **Breathing detection** fuses three independent signals: chest motion energy, facial landmark displacement (nose, chin, bridge), and RSA-derived respiratory rate from heart rate variability
+- **Face tracking** via MediaPipe FaceLandmarker for automatic ROI placement and face oval masking
 
+### Signal processing
+- Moving-average detrend, FFT-domain bandpass filtering, Hamming windowing
+- Noise floor rejection (peak must exceed 2x median spectral power)
+- Parabolic peak interpolation for sub-bin frequency resolution
+
+### Sensor fusion
+- **Kalman filter** tracks HR and breathing rate as 2D state vectors [rate, rate_velocity]
+- Each measurement source provides its own noise variance, so the filter naturally weights high-quality sources more heavily
+- Innovation gating rejects outlier measurements (3-sigma)
+- RSA (respiratory sinus arrhythmia) cross-couples the two filters: heart rate variability informs breathing rate, and vice versa
+- HRV metrics (SDNN, RMSSD) computed from beat-to-beat RR intervals
+
+### Visualization
+- **Dual-band motion amplification** via WebGL2 IIR temporal bandpass
+  - Pulse band (0.67-3.33 Hz): chrominance-only amplification on face, warm color tint
+  - Breathing band (0.1-0.6 Hz): motion amplification on body, suppressed on face
 Everything runs client-side in the browser. Nothing is recorded or sent anywhere.
 
 ## Development
