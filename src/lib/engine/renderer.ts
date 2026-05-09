@@ -1,5 +1,6 @@
 import {
   PASSTHROUGH_VERT,
+  DISPLAY_VERT,
   PASSTHROUGH_FRAG,
   MOTION_AMP_FRAG,
   MOTION_AMP_INIT_FRAG,
@@ -58,12 +59,14 @@ export interface RendererState {
   width: number;
   height: number;
   passthroughProgram: WebGLProgram;
+  displayProgram: WebGLProgram;
   motionAmpProgram: WebGLProgram;
   motionAmpInitProgram: WebGLProgram;
   videoTexture: WebGLTexture;
   iirLow1Textures: [WebGLTexture, WebGLTexture];
   iirLow2Textures: [WebGLTexture, WebGLTexture];
   displayTextures: [WebGLTexture, WebGLTexture];
+  maskTexture: WebGLTexture;
   framebuffers: [WebGLFramebuffer, WebGLFramebuffer];
   quadVAO: WebGLVertexArrayObject;
   pingPongIndex: number;
@@ -92,6 +95,7 @@ export function initRenderer(
   canvas.height = height;
 
   const passthroughProgram = createProgram(gl, PASSTHROUGH_VERT, PASSTHROUGH_FRAG);
+  const displayProgram = createProgram(gl, DISPLAY_VERT, PASSTHROUGH_FRAG);
   const motionAmpProgram = createProgram(gl, PASSTHROUGH_VERT, MOTION_AMP_FRAG);
   const motionAmpInitProgram = createProgram(gl, PASSTHROUGH_VERT, MOTION_AMP_INIT_FRAG);
 
@@ -110,6 +114,11 @@ export function initRenderer(
     createTexture(gl, width, height),
   ];
 
+  const maskTexture = createTexture(gl, 1, 1);
+  const whitePx = new Uint8Array([255, 255, 255, 255]);
+  gl.bindTexture(gl.TEXTURE_2D, maskTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, whitePx);
+
   const framebuffers: [WebGLFramebuffer, WebGLFramebuffer] = [
     gl.createFramebuffer()!,
     gl.createFramebuffer()!,
@@ -119,7 +128,7 @@ export function initRenderer(
   gl.bindVertexArray(quadVAO);
 
   const positions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-  const texCoords = new Float32Array([0, 1, 1, 1, 0, 0, 1, 0]);
+  const texCoords = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
   const posBuf = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
@@ -141,12 +150,14 @@ export function initRenderer(
     width,
     height,
     passthroughProgram,
+    displayProgram,
     motionAmpProgram,
     motionAmpInitProgram,
     videoTexture,
     iirLow1Textures,
     iirLow2Textures,
     displayTextures,
+    maskTexture,
     framebuffers,
     quadVAO,
     pingPongIndex: 0,
@@ -158,6 +169,12 @@ export function uploadVideoFrame(state: RendererState, video: HTMLVideoElement):
   const { gl, videoTexture } = state;
   gl.bindTexture(gl.TEXTURE_2D, videoTexture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, video);
+}
+
+export function uploadMask(state: RendererState, maskCanvas: OffscreenCanvas): void {
+  const { gl, maskTexture } = state;
+  gl.bindTexture(gl.TEXTURE_2D, maskTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, maskCanvas);
 }
 
 export function renderMotionAmp(
@@ -248,6 +265,10 @@ export function renderMotionAmp(
   gl.bindTexture(gl.TEXTURE_2D, state.iirLow2Textures[curr]);
   gl.uniform1i(gl.getUniformLocation(program, 'u_iirLow2'), 2);
 
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D, state.maskTexture);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_mask'), 3);
+
   gl.uniform1f(gl.getUniformLocation(program, 'u_alpha1'), alpha1);
   gl.uniform1f(gl.getUniformLocation(program, 'u_alpha2'), alpha2);
   gl.uniform1f(gl.getUniformLocation(program, 'u_amplification'), amplification);
@@ -266,10 +287,10 @@ export function renderToScreen(state: RendererState): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, canvas.width, canvas.height);
 
-  gl.useProgram(state.passthroughProgram);
+  gl.useProgram(state.displayProgram);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, state.displayTextures[curr]);
-  gl.uniform1i(gl.getUniformLocation(state.passthroughProgram, 'u_texture'), 0);
+  gl.uniform1i(gl.getUniformLocation(state.displayProgram, 'u_texture'), 0);
 
   gl.bindVertexArray(quadVAO);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -278,9 +299,11 @@ export function renderToScreen(state: RendererState): void {
 export function destroyRenderer(state: RendererState): void {
   const { gl } = state;
   gl.deleteProgram(state.passthroughProgram);
+  gl.deleteProgram(state.displayProgram);
   gl.deleteProgram(state.motionAmpProgram);
   gl.deleteProgram(state.motionAmpInitProgram);
   gl.deleteTexture(state.videoTexture);
+  gl.deleteTexture(state.maskTexture);
   for (const t of state.iirLow1Textures) gl.deleteTexture(t);
   for (const t of state.iirLow2Textures) gl.deleteTexture(t);
   for (const t of state.displayTextures) gl.deleteTexture(t);

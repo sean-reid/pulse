@@ -75,48 +75,31 @@
 </script>
 
 {#if visible}
-  <div class="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-    <!-- Pattern selector -->
-    <div class="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto">
-      <div
-        class="flex items-center gap-1 p-1 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.08]"
-      >
-        {#each patterns as [key, config] (key)}
-          <button
-            onclick={() => selectPattern(key)}
-            class="py-1.5 px-3 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer
-                   {appState.breathPattern === key
-              ? 'bg-breath-blue/20 text-breath-blue'
-              : 'text-text-secondary hover:text-text-primary'}"
-          >
-            {config.name}
-          </button>
-        {/each}
-      </div>
+  <div class="flex flex-col items-center gap-5 w-full">
+    <div class="flex items-center gap-1">
+      {#each patterns as [key, config] (key)}
+        <button
+          onclick={() => selectPattern(key)}
+          class="py-1.5 px-3 rounded-md text-xs cursor-pointer transition-colors
+                 {appState.breathPattern === key
+            ? 'bg-blue-muted text-blue'
+            : 'text-text-secondary hover:text-text-primary'}"
+        >
+          {config.name}
+        </button>
+      {/each}
     </div>
 
-    <!-- Breathing circle -->
     <div class="relative flex items-center justify-center">
       <div
-        class="w-48 h-48 rounded-full border-2 border-breath-blue/30 flex items-center justify-center
-               transition-transform duration-500 ease-out sm:w-56 sm:h-56"
+        class="w-32 h-32 rounded-full border border-blue/30 flex items-center justify-center
+               transition-transform duration-500 ease-out sm:w-40 sm:h-40"
         style="transform: scale({scale})"
       >
-        <div
-          class="w-40 h-40 rounded-full border border-breath-blue/15 flex items-center justify-center sm:w-48 sm:h-48"
-        >
-          <div class="flex flex-col items-center gap-1">
-            <span class="text-breath-blue text-lg font-medium">{phaseLabels[phase]}</span>
-          </div>
-        </div>
+        <span class="text-blue text-sm">{phaseLabels[phase]}</span>
       </div>
     </div>
 
-    <!-- Session time -->
-    <div class="absolute bottom-32 left-1/2 -translate-x-1/2">
-      <span class="text-text-secondary text-sm tabular-nums"
-        >{formatTime(appState.sessionTime)}</span
-      >
-    </div>
+    <span class="text-text-tertiary text-xs tabular-nums">{formatTime(appState.sessionTime)}</span>
   </div>
 {/if}

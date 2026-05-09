@@ -38,6 +38,11 @@ const FOREHEAD_LANDMARKS = [10, 67, 69, 104, 108, 151, 284, 298, 299, 337];
 const LEFT_CHEEK_LANDMARKS = [123, 147, 187, 205, 206, 216];
 const RIGHT_CHEEK_LANDMARKS = [352, 376, 411, 425, 426, 436];
 
+const FACE_OVAL_INDICES = [
+  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148,
+  176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+];
+
 export async function loadFaceTracker(onProgress?: (msg: string) => void): Promise<void> {
   if (faceLandmarker) return;
   if (loadPromise) return loadPromise;
@@ -72,11 +77,17 @@ export async function loadFaceTracker(onProgress?: (msg: string) => void): Promi
   return loadPromise;
 }
 
+export interface FaceOvalPoint {
+  x: number;
+  y: number;
+}
+
 export interface FaceROIs {
   forehead: ROI;
   leftCheek: ROI;
   rightCheek: ROI;
   chest: ROI;
+  oval: FaceOvalPoint[];
 }
 
 export function detectFace(video: HTMLVideoElement, timestamp: number): FaceROIs | null {
@@ -107,7 +118,65 @@ export function detectFace(video: HTMLVideoElement, timestamp: number): FaceROIs
   chest.width = Math.min(chest.width, w - chest.x);
   chest.height = Math.min(chest.height, h - chest.y);
 
-  return { forehead, leftCheek, rightCheek, chest };
+  const oval = getFaceOval(landmarks, w, h);
+
+  return { forehead, leftCheek, rightCheek, chest, oval };
+}
+
+function getFaceOval(landmarks: Landmark[], w: number, h: number): FaceOvalPoint[] {
+  const points = FACE_OVAL_INDICES.map((i) => ({
+    x: landmarks[i].x * w,
+    y: landmarks[i].y * h,
+  }));
+
+  let cx = 0,
+    cy = 0;
+  for (const p of points) {
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= points.length;
+  cy /= points.length;
+
+  const expand = 1.2;
+  return points.map((p) => ({
+    x: cx + (p.x - cx) * expand,
+    y: cy + (p.y - cy) * expand,
+  }));
+}
+
+const MASK_W = 80;
+const MASK_H = 60;
+let maskCanvas: OffscreenCanvas | null = null;
+let maskCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+export function generateFaceMask(
+  oval: FaceOvalPoint[],
+  videoW: number,
+  videoH: number,
+): OffscreenCanvas {
+  if (!maskCanvas) {
+    maskCanvas = new OffscreenCanvas(MASK_W, MASK_H);
+    maskCtx = maskCanvas.getContext('2d')!;
+  }
+
+  maskCtx!.clearRect(0, 0, MASK_W, MASK_H);
+  maskCtx!.fillStyle = 'white';
+  maskCtx!.beginPath();
+
+  const sx = MASK_W / videoW;
+  const sy = MASK_H / videoH;
+
+  for (let i = 0; i < oval.length; i++) {
+    const x = oval[i].x * sx;
+    const y = oval[i].y * sy;
+    if (i === 0) maskCtx!.moveTo(x, y);
+    else maskCtx!.lineTo(x, y);
+  }
+  maskCtx!.closePath();
+  maskCtx!.fill();
+
+  return maskCanvas;
 }
 
 function landmarksToROI(

@@ -2,18 +2,25 @@ import {
   type RendererState,
   initRenderer,
   uploadVideoFrame,
+  uploadMask,
   renderMotionAmp,
   renderToScreen,
   destroyRenderer,
 } from './renderer';
-import { loadFaceTracker, detectFace, isLoaded, type FaceROIs } from '../detection/face-tracker';
+import {
+  loadFaceTracker,
+  detectFace,
+  generateFaceMask,
+  isLoaded,
+  type FaceROIs,
+} from '../detection/face-tracker';
 import { RppgDetector } from '../detection/rppg';
 import { BreathingDetector } from '../detection/breathing';
 import { iirCoefficient } from '../utils/math';
 import { appState } from '../stores/app-state.svelte';
 import {
-  BPM_FREQ_MIN,
-  BPM_FREQ_MAX,
+  AMP_FREQ_MIN,
+  AMP_FREQ_MAX,
   CAMERA_FPS,
   FACE_DETECT_INTERVAL,
   BPM_UPDATE_INTERVAL,
@@ -61,8 +68,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
     uploadVideoFrame(renderer, video);
 
-    const alpha1 = iirCoefficient(BPM_FREQ_MIN, CAMERA_FPS);
-    const alpha2 = iirCoefficient(BPM_FREQ_MAX, CAMERA_FPS);
+    const alpha1 = iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS);
+    const alpha2 = iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS);
     const amp = appState.amplification;
 
     renderMotionAmp(renderer, alpha1, alpha2, amp);
@@ -74,13 +81,20 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
         if (rois) {
           currentROIs = rois;
           appState.faceDetected = true;
+
+          const mask = generateFaceMask(rois.oval, video.videoWidth, video.videoHeight);
+          uploadMask(renderer, mask);
         } else {
           appState.faceDetected = false;
         }
       }
 
       if (currentROIs) {
-        rppg.sampleFrame(video, currentROIs.forehead);
+        rppg.sampleFrame(video, [
+          currentROIs.forehead,
+          currentROIs.leftCheek,
+          currentROIs.rightCheek,
+        ]);
 
         if (frameCount % BREATH_DETECT_INTERVAL === 0) {
           breathing.sampleFrame(video, currentROIs.chest);
@@ -99,6 +113,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
           if (bpmResult) {
             appState.bpm = bpmResult.bpm;
             appState.bpmConfidence = bpmResult.confidence;
+            appState.waveformSignal = bpmResult.signal;
           }
 
           const breathResult = breathing.computeBreathingRate();

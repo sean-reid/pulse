@@ -22,18 +22,15 @@
 </script>
 
 {#if visible}
-  <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 sm:bottom-8">
-    <div
-      class="flex items-center gap-1 p-1 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08]"
-    >
+  <div class="flex-shrink-0 flex justify-center pb-6 pt-2 sm:pb-8">
+    <div class="flex items-center gap-1">
       {#each modes as mode (mode.key)}
         <button
           onclick={() => selectMode(mode.key)}
-          class="relative py-2.5 px-5 rounded-full text-sm font-medium transition-all duration-200
-                 min-w-[72px] cursor-pointer
+          class="py-2 px-5 rounded-md text-sm cursor-pointer transition-colors
                  {appState.mode === mode.key
-            ? 'bg-white/15 text-text-primary shadow-sm'
-            : 'text-text-secondary hover:text-text-primary hover:bg-white/5'}"
+            ? 'bg-bg-elevated text-text-primary'
+            : 'text-text-secondary hover:text-text-primary'}"
         >
           {mode.label}
         </button>

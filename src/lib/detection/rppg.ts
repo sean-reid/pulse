@@ -43,37 +43,44 @@ export class RppgDetector {
     this.sampleCtx = this.sampleCanvas.getContext('2d', { willReadFrequently: true })!;
   }
 
-  sampleFrame(video: HTMLVideoElement, roi: ROI): void {
-    const { sampleCtx, sampleCanvas } = this;
-    sampleCtx.drawImage(
-      video,
-      roi.x,
-      roi.y,
-      roi.width,
-      roi.height,
-      0,
-      0,
-      sampleCanvas.width,
-      sampleCanvas.height,
-    );
+  sampleFrame(video: HTMLVideoElement, rois: ROI[]): void {
+    let totalGreen = 0;
+    let totalCount = 0;
 
-    const imageData = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
-    const pixels = imageData.data;
-    let greenSum = 0;
-    let count = 0;
+    for (const roi of rois) {
+      this.sampleCtx.drawImage(
+        video,
+        roi.x,
+        roi.y,
+        roi.width,
+        roi.height,
+        0,
+        0,
+        this.sampleCanvas.width,
+        this.sampleCanvas.height,
+      );
 
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
-      if (r > 40 && g > 40 && b > 20 && r < 250) {
-        greenSum += g;
-        count++;
+      const imageData = this.sampleCtx.getImageData(
+        0,
+        0,
+        this.sampleCanvas.width,
+        this.sampleCanvas.height,
+      );
+      const pixels = imageData.data;
+
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        if (r > 40 && g > 40 && b > 20 && r < 250) {
+          totalGreen += g;
+          totalCount++;
+        }
       }
     }
 
-    if (count > 0) {
-      this.buffer.push(greenSum / count);
+    if (totalCount > 0) {
+      this.buffer.push(totalGreen / totalCount);
     }
     this.frameCount++;
   }

@@ -16,7 +16,7 @@ let _error = $state<string | null>(null);
 let _bpm = $state<number | null>(null);
 let _bpmConfidence = $state(0);
 let _breathingRate = $state<number | null>(null);
-let _amplification = $state(15);
+let _amplification = $state(5);
 
 let _faceDetected = $state(false);
 let _modelLoaded = $state(false);
@@ -27,6 +27,8 @@ let _breathPattern = $state<BreathPattern>('4-7-8');
 let _breathPhase = $state<'inhale' | 'hold' | 'exhale' | 'idle'>('idle');
 let _breathSynced = $state(false);
 let _sessionTime = $state(0);
+
+let _waveformSignal = $state<Float64Array>(new Float64Array(0));
 
 let _checkTimeRemaining = $state(60);
 let _checkActive = $state(false);
@@ -137,6 +139,13 @@ export const appState = {
     _sessionTime = v;
   },
 
+  get waveformSignal() {
+    return _waveformSignal;
+  },
+  set waveformSignal(v: Float64Array) {
+    _waveformSignal = v;
+  },
+
   get checkTimeRemaining() {
     return _checkTimeRemaining;
   },
@@ -160,6 +169,7 @@ export const appState = {
     _breathPhase = 'idle';
     _breathSynced = false;
     _sessionTime = 0;
+    _waveformSignal = new Float64Array(0);
     _checkTimeRemaining = 60;
     _checkActive = false;
   },

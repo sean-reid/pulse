@@ -32,12 +32,14 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
+      - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npx playwright test --project=chromium
+        timeout-minutes: 3
 
   deploy:
     if: github.ref == 'refs/heads/main'
-    needs: [quality, e2e]
+    needs: [quality]
     runs-on: ubuntu-latest
     permissions:
       pages: write

@@ -58,39 +58,37 @@
 </script>
 
 {#if visible && !result}
-  <div class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-    <div class="flex flex-col items-center gap-4">
-      <div class="relative w-36 h-36">
-        <svg class="w-full h-full -rotate-90" viewBox="0 0 120 120">
-          <circle
-            cx="60"
-            cy="60"
-            r="54"
-            fill="none"
-            stroke="rgba(255,255,255,0.06)"
-            stroke-width="4"
-          />
-          <circle
-            cx="60"
-            cy="60"
-            r="54"
-            fill="none"
-            stroke="#ff4466"
-            stroke-width="4"
-            stroke-dasharray={circumference}
-            stroke-dashoffset={circumference * (1 - progress)}
-            stroke-linecap="round"
-            class="transition-[stroke-dashoffset] duration-1000 ease-linear"
-          />
-        </svg>
-        <div class="absolute inset-0 flex items-center justify-center">
-          <span class="text-4xl font-bold text-text-primary tabular-nums"
-            >{appState.checkTimeRemaining}</span
-          >
-        </div>
+  <div class="flex flex-col items-center gap-3">
+    <div class="relative w-28 h-28">
+      <svg class="w-full h-full -rotate-90" viewBox="0 0 120 120">
+        <circle
+          cx="60"
+          cy="60"
+          r="54"
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          stroke-width="3"
+        />
+        <circle
+          cx="60"
+          cy="60"
+          r="54"
+          fill="none"
+          stroke="var(--color-accent)"
+          stroke-width="3"
+          stroke-dasharray={circumference}
+          stroke-dashoffset={circumference * (1 - progress)}
+          stroke-linecap="round"
+          class="transition-[stroke-dashoffset] duration-1000 ease-linear"
+        />
+      </svg>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <span class="text-3xl font-semibold text-text-primary tabular-nums"
+          >{appState.checkTimeRemaining}</span
+        >
       </div>
-      <p class="text-text-secondary text-sm">Sit still and breathe normally</p>
     </div>
+    <p class="text-text-secondary text-xs">Sit still and breathe normally</p>
   </div>
 {/if}
 
