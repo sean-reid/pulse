@@ -25,6 +25,7 @@ import {
   AMP_FREQ_MAX,
   BREATH_FREQ_MIN,
   BREATH_FREQ_MAX,
+  AMPLIFICATION,
   CAMERA_FPS,
   FACE_DETECT_INTERVAL,
   BPM_UPDATE_INTERVAL,
@@ -99,8 +100,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       pulseAlpha2: iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS),
       breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
-      pulseAmp: appState.amplification,
-      breathAmp: appState.amplification * 0.6,
+      pulseAmp: AMPLIFICATION,
+      breathAmp: AMPLIFICATION * 1.5,
     };
 
     renderMotionAmp(renderer, ampParams);

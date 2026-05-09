@@ -34,7 +34,7 @@ export interface RppgResult {
 
 const MIN_SAMPLES = 150;
 const MIN_CONFIDENCE = 0.08;
-const CHROM_WINDOW = 64;
+const POS_WINDOW = 48;
 
 function isSkinPixel(r: number, g: number, b: number): boolean {
   const sum = r + g + b;
@@ -121,40 +121,47 @@ export class RppgDetector {
     }
   }
 
-  private computeChromPulse(): Float64Array {
+  private computePosPulse(): Float64Array {
     const rArr = this.bufferR.toArray();
     const gArr = this.bufferG.toArray();
     const bArr = this.bufferB.toArray();
     const len = rArr.length;
     const pulse = new Float64Array(len);
 
-    for (let start = 0; start <= len - CHROM_WINDOW; start++) {
-      const rStats = meanAndStd(rArr, start, CHROM_WINDOW);
-      const gStats = meanAndStd(gArr, start, CHROM_WINDOW);
-      const bStats = meanAndStd(bArr, start, CHROM_WINDOW);
+    for (let start = 0; start <= len - POS_WINDOW; start++) {
+      let rMean = 0,
+        gMean = 0,
+        bMean = 0;
+      for (let j = 0; j < POS_WINDOW; j++) {
+        rMean += rArr[start + j];
+        gMean += gArr[start + j];
+        bMean += bArr[start + j];
+      }
+      rMean /= POS_WINDOW;
+      gMean /= POS_WINDOW;
+      bMean /= POS_WINDOW;
 
-      const rStd = rStats.std > 1e-10 ? rStats.std : 1;
-      const gStd = gStats.std > 1e-10 ? gStats.std : 1;
-      const bStd = bStats.std > 1e-10 ? bStats.std : 1;
+      if (rMean < 1 || gMean < 1 || bMean < 1) continue;
 
-      const xs = new Float64Array(CHROM_WINDOW);
-      const ys = new Float64Array(CHROM_WINDOW);
+      const s1 = new Float64Array(POS_WINDOW);
+      const s2 = new Float64Array(POS_WINDOW);
 
-      for (let j = 0; j < CHROM_WINDOW; j++) {
+      for (let j = 0; j < POS_WINDOW; j++) {
         const idx = start + j;
-        const rn = (rArr[idx] - rStats.mean) / rStd;
-        const gn = (gArr[idx] - gStats.mean) / gStd;
-        const bn = (bArr[idx] - bStats.mean) / bStd;
-        xs[j] = 3 * rn - 2 * gn;
-        ys[j] = 1.5 * rn + gn - 1.5 * bn;
+        const rn = rArr[idx] / rMean;
+        const gn = gArr[idx] / gMean;
+        const bn = bArr[idx] / bMean;
+        s1[j] = gn - bn;
+        s2[j] = gn + bn - 2 * rn;
       }
 
-      const xsStats = meanAndStd(xs, 0, CHROM_WINDOW);
-      const ysStats = meanAndStd(ys, 0, CHROM_WINDOW);
-      const alpha = ysStats.std > 1e-10 ? xsStats.std / ysStats.std : 0;
+      const s1Stats = meanAndStd(s1, 0, POS_WINDOW);
+      const s2Stats = meanAndStd(s2, 0, POS_WINDOW);
+      const alpha = s2Stats.std > 1e-10 ? s1Stats.std / s2Stats.std : 0;
 
-      for (let j = 0; j < CHROM_WINDOW; j++) {
-        pulse[start + j] += (xs[j] - alpha * ys[j]) / CHROM_WINDOW;
+      for (let j = 0; j < POS_WINDOW; j++) {
+        const h = s1[j] + alpha * s2[j];
+        pulse[start + j] += (h - s1Stats.mean) / Math.max(s1Stats.std, 1e-10) / POS_WINDOW;
       }
     }
 
@@ -164,8 +171,8 @@ export class RppgDetector {
   computeBpm(): RppgResult | null {
     if (this.bufferG.length < MIN_SAMPLES) return null;
 
-    const chromPulse = this.computeChromPulse();
-    const detrended = detrend(chromPulse);
+    const posPulse = this.computePosPulse();
+    const detrended = detrend(posPulse);
     const filtered = bandpassFilter(detrended, CAMERA_FPS, BPM_FREQ_MIN, BPM_FREQ_MAX);
     const windowed = hammingWindow(filtered);
 

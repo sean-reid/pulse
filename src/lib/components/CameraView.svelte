@@ -3,7 +3,6 @@
   import { createFrameLoop, type FrameLoop } from '../engine/frame-loop';
   import LoadingOverlay from './LoadingOverlay.svelte';
   import WaveformGraph from './WaveformGraph.svelte';
-  import { MIN_AMPLIFICATION, MAX_AMPLIFICATION } from '../utils/constants';
 
   interface Props {
     video: HTMLVideoElement;
@@ -25,11 +24,6 @@
     }
   });
 
-  function handleAmplificationChange(e: Event) {
-    const target = e.target as HTMLInputElement;
-    appState.amplification = Number(target.value);
-  }
-
   let beatDuration = $derived(appState.bpm ? 60 / appState.bpm : 1);
   let showVitals = $derived(appState.bpm !== null && appState.status === 'active');
   let showBreathing = $derived(appState.breathingRate !== null && appState.status === 'active');
@@ -47,19 +41,6 @@
     <div class="relative w-full max-w-xs rounded-lg overflow-hidden flex-shrink-0 sm:max-w-sm">
       <canvas bind:this={canvas} class="w-full aspect-[4/3] object-cover block"></canvas>
       <LoadingOverlay />
-
-      <div class="absolute bottom-0 left-0 right-0 p-2">
-        <input
-          type="range"
-          min={MIN_AMPLIFICATION}
-          max={MAX_AMPLIFICATION}
-          value={appState.amplification}
-          oninput={handleAmplificationChange}
-          class="w-full h-0.5 appearance-none bg-white/15 rounded cursor-pointer
-                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white/70"
-        />
-      </div>
     </div>
 
     <!-- Current vitals -->

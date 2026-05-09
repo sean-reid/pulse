@@ -24,18 +24,6 @@ void main() {
 }
 `;
 
-export const PASSTHROUGH_FRAG = `#version 300 es
-precision highp float;
-
-uniform sampler2D u_texture;
-in vec2 v_texCoord;
-out vec4 fragColor;
-
-void main() {
-  fragColor = texture(u_texture, v_texCoord);
-}
-`;
-
 export const MOTION_AMP_FRAG = `#version 300 es
 precision highp float;
 
@@ -80,10 +68,10 @@ void main() {
 
   float mask = texture(u_mask, v_texCoord).r;
 
-  vec3 pulseTinted = pulseChroma * vec3(2.0, 0.6, 0.6);
-  vec3 pulseDelta = clamp(u_pulseAmp * 3.0 * mask * pulseTinted, -0.3, 0.3);
+  vec3 pulseTinted = pulseChroma * vec3(1.3, 0.85, 0.85);
+  vec3 pulseDelta = clamp(u_pulseAmp * 1.5 * mask * pulseTinted, -0.12, 0.12);
 
-  vec3 breathDelta = clamp(u_breathAmp * (1.0 - mask * 0.3) * breathBand, -0.15, 0.15);
+  vec3 breathDelta = clamp(u_breathAmp * (1.0 - mask * 0.5) * breathBand, -0.15, 0.15);
 
   vec3 amplified = current + pulseDelta + breathDelta;
 
@@ -114,5 +102,34 @@ void main() {
   out_pulseLow2 = color;
   out_breathLow1 = color;
   out_breathLow2 = color;
+}
+`;
+
+export const BLUR_FRAG = `#version 300 es
+precision highp float;
+
+uniform sampler2D u_texture;
+uniform vec2 u_direction;
+in vec2 v_texCoord;
+out vec4 fragColor;
+
+void main() {
+  // 9-tap separable Gaussian, sigma ~ 2.5
+  const float w0 = 0.1716;
+  const float w1 = 0.1584;
+  const float w2 = 0.1246;
+  const float w3 = 0.0835;
+  const float w4 = 0.0477;
+
+  vec3 result = texture(u_texture, v_texCoord).rgb * w0;
+  result += texture(u_texture, v_texCoord + 1.0 * u_direction).rgb * w1;
+  result += texture(u_texture, v_texCoord - 1.0 * u_direction).rgb * w1;
+  result += texture(u_texture, v_texCoord + 2.0 * u_direction).rgb * w2;
+  result += texture(u_texture, v_texCoord - 2.0 * u_direction).rgb * w2;
+  result += texture(u_texture, v_texCoord + 3.0 * u_direction).rgb * w3;
+  result += texture(u_texture, v_texCoord - 3.0 * u_direction).rgb * w3;
+  result += texture(u_texture, v_texCoord + 4.0 * u_direction).rgb * w4;
+  result += texture(u_texture, v_texCoord - 4.0 * u_direction).rgb * w4;
+  fragColor = vec4(result, 1.0);
 }
 `;

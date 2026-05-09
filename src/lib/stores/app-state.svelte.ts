@@ -15,7 +15,6 @@ let _error = $state<string | null>(null);
 let _bpm = $state<number | null>(null);
 let _bpmConfidence = $state(0);
 let _breathingRate = $state<number | null>(null);
-let _amplification = $state(5);
 
 let _avgBpm = $state<number | null>(null);
 let _bpmVariability = $state<number | null>(null);
@@ -70,13 +69,6 @@ export const appState = {
   },
   set breathingRate(v: number | null) {
     _breathingRate = v;
-  },
-
-  get amplification() {
-    return _amplification;
-  },
-  set amplification(v: number) {
-    _amplification = v;
   },
 
   get avgBpm() {
