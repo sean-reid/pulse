@@ -51,7 +51,9 @@
 
     <!-- Current vitals -->
     <div class="flex flex-col items-center gap-3 flex-shrink-0">
-      {#if showVitals}
+      {#if !appState.faceDetected && appState.modelLoaded && appState.status !== 'idle'}
+        <span class="text-sm text-text-tertiary">Position your face in the frame</span>
+      {:else if showVitals}
         <div class="flex items-center gap-6">
           <div class="flex items-center gap-2.5">
             <div class="heartbeat" style="--beat-duration: {beatDuration}s">
