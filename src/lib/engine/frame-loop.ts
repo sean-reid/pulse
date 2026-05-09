@@ -100,7 +100,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
       pulseAmp: appState.amplification,
-      breathAmp: appState.amplification * 0.4,
+      breathAmp: appState.amplification * 0.6,
     };
 
     renderMotionAmp(renderer, ampParams);
