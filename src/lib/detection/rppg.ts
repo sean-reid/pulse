@@ -8,6 +8,7 @@ import {
   findDominantPeak,
   nextPowerOf2,
 } from './signal';
+import { SpatialBeamformer } from './spatial-beamformer';
 import {
   SIGNAL_BUFFER_SIZE,
   BPM_FREQ_MIN,
@@ -34,6 +35,8 @@ export interface RppgResult {
 const MIN_SAMPLES = 150;
 const MIN_CONFIDENCE = 0.08;
 const POS_WINDOW = 48;
+const PIXEL_COUNT = ROI_SAMPLE_SIZE * ROI_SAMPLE_SIZE;
+const CORR_HISTORY = 64;
 
 function isSkinPixel(r: number, g: number, b: number): boolean {
   const sum = r + g + b;
@@ -67,6 +70,8 @@ export class RppgDetector {
   private bufferB = new RingBuffer(SIGNAL_BUFFER_SIZE);
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
+  private beamformer = new SpatialBeamformer(PIXEL_COUNT, CORR_HISTORY);
+  private lastBpm = 0;
 
   constructor() {
     this.sampleCanvas = new OffscreenCanvas(ROI_SAMPLE_SIZE, ROI_SAMPLE_SIZE);
@@ -77,9 +82,10 @@ export class RppgDetector {
     let totalR = 0;
     let totalG = 0;
     let totalB = 0;
-    let totalCount = 0;
+    let totalW = 0;
 
-    for (const roi of rois) {
+    for (let ri = 0; ri < rois.length; ri++) {
+      const roi = rois[ri];
       this.sampleCtx.drawImage(
         video,
         roi.x,
@@ -92,31 +98,32 @@ export class RppgDetector {
         this.sampleCanvas.height,
       );
 
-      const imageData = this.sampleCtx.getImageData(
+      const { data } = this.sampleCtx.getImageData(
         0,
         0,
         this.sampleCanvas.width,
         this.sampleCanvas.height,
       );
-      const pixels = imageData.data;
 
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i];
-        const g = pixels[i + 1];
-        const b = pixels[i + 2];
-        if (isSkinPixel(r, g, b)) {
-          totalR += r;
-          totalG += g;
-          totalB += b;
-          totalCount++;
-        }
+      if (ri === 0) this.beamformer.record(data);
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        if (!isSkinPixel(r, g, b)) continue;
+        const w = this.beamformer.weight(i >> 2);
+        totalR += r * w;
+        totalG += g * w;
+        totalB += b * w;
+        totalW += w;
       }
     }
 
-    if (totalCount > 0) {
-      this.bufferR.push(totalR / totalCount);
-      this.bufferG.push(totalG / totalCount);
-      this.bufferB.push(totalB / totalCount);
+    if (totalW > 0) {
+      this.bufferR.push(totalR / totalW);
+      this.bufferG.push(totalG / totalW);
+      this.bufferB.push(totalB / totalW);
     }
   }
 
@@ -170,6 +177,10 @@ export class RppgDetector {
   computeBpm(sampleRate: number): RppgResult | null {
     if (this.bufferG.length < MIN_SAMPLES) return null;
 
+    if (this.lastBpm > 0) {
+      this.beamformer.correlate(this.lastBpm, sampleRate);
+    }
+
     const posPulse = this.computePosPulse();
     const detrended = detrend(posPulse);
     const filtered = bandpassFilter(detrended, sampleRate, BPM_FREQ_MIN, BPM_FREQ_MAX);
@@ -189,6 +200,8 @@ export class RppgDetector {
     const rawBpm = peak.frequency * 60;
     if (rawBpm < BPM_MIN || rawBpm > BPM_MAX) return null;
 
+    this.lastBpm = rawBpm;
+
     return {
       rawBpm,
       confidence: peak.confidence,
@@ -201,5 +214,7 @@ export class RppgDetector {
     this.bufferR.clear();
     this.bufferG.clear();
     this.bufferB.clear();
+    this.beamformer.reset();
+    this.lastBpm = 0;
   }
 }
