@@ -25,14 +25,18 @@
   });
 
   let beatDuration = $derived(appState.bpm ? 60 / appState.bpm : 1);
+  let stable = $derived(!appState.unstable);
   let showVitals = $derived(
-    appState.faceDetected && appState.bpm !== null && appState.status === 'active',
+    appState.faceDetected && appState.bpm !== null && appState.status === 'active' && stable,
   );
   let showBreathing = $derived(
-    appState.faceDetected && appState.breathingRate !== null && appState.status === 'active',
+    appState.faceDetected &&
+      appState.breathingRate !== null &&
+      appState.status === 'active' &&
+      stable,
   );
   let showStats = $derived(
-    appState.faceDetected && appState.avgBpm !== null && appState.status === 'active',
+    appState.faceDetected && appState.avgBpm !== null && appState.status === 'active' && stable,
   );
 </script>
 
@@ -45,6 +49,12 @@
     <div class="absolute inset-0 flex items-center justify-center">
       <span class="text-sm text-white/60 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm">
         Position your face in the frame
+      </span>
+    </div>
+  {:else if appState.unstable && appState.faceDetected && appState.status === 'active'}
+    <div class="absolute inset-0 flex items-center justify-center">
+      <span class="text-sm text-white/70 bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-sm">
+        Hold steady for accurate readings
       </span>
     </div>
   {/if}

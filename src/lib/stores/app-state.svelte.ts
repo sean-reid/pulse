@@ -24,6 +24,7 @@ let _calibrationProgress = $state(0);
 
 let _waveformSignal = $state<Float64Array>(new Float64Array(0));
 let _hrv = $state<{ sdnn: number; rmssd: number } | null>(null);
+let _unstable = $state(false);
 
 export const appState = {
   get started() {
@@ -124,6 +125,13 @@ export const appState = {
     _hrv = v;
   },
 
+  get unstable() {
+    return _unstable;
+  },
+  set unstable(v: boolean) {
+    _unstable = v;
+  },
+
   reset() {
     _bpm = null;
     _bpmConfidence = 0;
@@ -134,5 +142,6 @@ export const appState = {
     _calibrationProgress = 0;
     _waveformSignal = new Float64Array(0);
     _hrv = null;
+    _unstable = false;
   },
 };

@@ -67,6 +67,9 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   let smoothBreathSignal = 0;
   let bodyCenterX = 0.5;
   let bodyCenterY = 0.7;
+  let prevNoseX = 0;
+  let prevNoseY = 0;
+  let smoothJitter = 0;
 
   function updateRollingStats(bpm: number) {
     bpmHistory.push(bpm);
@@ -165,6 +168,18 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
           bodyCenterX = (rois.chest.x + rois.chest.width / 2) / video.videoWidth;
           bodyCenterY = (rois.chest.y + rois.chest.height / 2) / video.videoHeight;
+
+          const noseX = (rois.forehead.x + rois.forehead.width / 2) / video.videoWidth;
+          const noseY = (rois.forehead.y + rois.forehead.height / 2) / video.videoHeight;
+          if (prevNoseX > 0) {
+            const dx = noseX - prevNoseX;
+            const dy = noseY - prevNoseY;
+            const displacement = Math.sqrt(dx * dx + dy * dy);
+            smoothJitter += 0.15 * (displacement - smoothJitter);
+          }
+          prevNoseX = noseX;
+          prevNoseY = noseY;
+          appState.unstable = smoothJitter > 0.012;
         } else if (lastFaceTime > 0 && now - lastFaceTime > FACE_GRACE_MS) {
           currentROIs = null;
           appState.faceDetected = false;
@@ -183,6 +198,9 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
             breathBaselineInit = false;
             breathSignalRaw = 0;
             smoothBreathSignal = 0;
+            prevNoseX = 0;
+            prevNoseY = 0;
+            smoothJitter = 0;
           }
         }
       }
@@ -265,6 +283,9 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       breathBaselineInit = false;
       breathSignalRaw = 0;
       smoothBreathSignal = 0;
+      prevNoseX = 0;
+      prevNoseY = 0;
+      smoothJitter = 0;
     },
   };
 }
