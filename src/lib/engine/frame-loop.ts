@@ -49,7 +49,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   let running = false;
   let lastVideoTime = -1;
   let frameCount = 0;
-  let measuredFps = CAMERA_FPS;
+  let smoothDt = 1 / CAMERA_FPS;
 
   const rppg = new RppgDetector();
   const breathing = new BreathingDetector();
@@ -103,8 +103,9 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
     frameCount++;
 
     if (dt > 0 && dt < 0.1) {
-      measuredFps += 0.05 * (1 / dt - measuredFps);
+      smoothDt += 0.05 * (dt - smoothDt);
     }
+    const measuredFps = 1 / smoothDt;
 
     uploadVideoFrame(renderer, video);
 
