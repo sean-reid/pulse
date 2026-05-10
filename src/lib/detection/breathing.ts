@@ -64,13 +64,11 @@ export class BreathingDetector {
     const pixels = imageData.data;
 
     if (this.prevPixels) {
-      let motionEnergy = 0;
+      let meanDiff = 0;
       for (let i = 0; i < pixels.length; i += 4) {
-        const dg = pixels[i + 1] - this.prevPixels[i + 1];
-        motionEnergy += dg * dg;
+        meanDiff += pixels[i + 1] - this.prevPixels[i + 1];
       }
-      motionEnergy /= pixels.length / 4;
-      this.motionBuffer.push(Math.sqrt(motionEnergy));
+      this.motionBuffer.push(meanDiff / (pixels.length / 4));
     }
 
     this.prevPixels = new Uint8ClampedArray(pixels);
