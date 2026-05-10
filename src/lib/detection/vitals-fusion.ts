@@ -44,7 +44,7 @@ export interface FusedVitals {
  * readings are down-weighted automatically.
  */
 const HR_BASE_VAR = 4; // ±2 bpm at peak confidence
-const BREATH_MOTION_BASE_VAR = 9; // ±3 br/min — motion is noisier
+const BREATH_MOTION_BASE_VAR = 20; // motion is noisy, especially on mobile with small chest ROI
 const BREATH_LANDMARK_BASE_VAR = 4; // ±2 br/min — landmarks are more precise
 const BREATH_RSA_BASE_VAR = 12; // ±3.5 br/min — indirect, discounted
 
