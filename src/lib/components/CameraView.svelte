@@ -49,7 +49,9 @@
     </div>
   {/if}
 
-  <div class="absolute bottom-0 left-0 right-0 pt-24 pb-8 px-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+  <div
+    class="absolute bottom-0 left-0 right-0 pt-24 pb-8 px-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent"
+  >
     <div class="flex flex-col items-center gap-3 max-w-sm mx-auto">
       {#if showVitals}
         <div class="flex items-center gap-6">
