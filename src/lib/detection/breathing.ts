@@ -1,13 +1,4 @@
-import {
-  RingBuffer,
-  detrend,
-  hammingWindow,
-  bandpassFilter,
-  fft,
-  magnitudeSpectrum,
-  findDominantPeak,
-  nextPowerOf2,
-} from './signal';
+import { RingBuffer, detrend, bandpassFilter, autocorrelationPeak } from './signal';
 import type { ROI } from './rppg';
 import {
   BREATH_FREQ_MIN,
@@ -30,6 +21,7 @@ const MIN_LANDMARK_SAMPLES = 80;
 const MIN_CONFIDENCE = 0.12;
 const MOTION_DETREND_WINDOW = 150;
 const LANDMARK_DETREND_WINDOW = 50;
+const LANDMARK_SMOOTH_ALPHA = 0.5;
 
 export class BreathingDetector {
   private motionBuffer = new RingBuffer(MOTION_BUFFER_SIZE);
@@ -37,6 +29,8 @@ export class BreathingDetector {
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
   private prevPixels: Uint8ClampedArray | null = null;
+  private smoothedY = 0;
+  private smoothedYInit = false;
 
   constructor() {
     this.sampleCanvas = new OffscreenCanvas(ROI_SAMPLE_SIZE, ROI_SAMPLE_SIZE);
@@ -75,7 +69,13 @@ export class BreathingDetector {
   }
 
   sampleLandmarks(breathLandmarkY: number): void {
-    this.landmarkBuffer.push(breathLandmarkY);
+    if (!this.smoothedYInit) {
+      this.smoothedY = breathLandmarkY;
+      this.smoothedYInit = true;
+    } else {
+      this.smoothedY += LANDMARK_SMOOTH_ALPHA * (breathLandmarkY - this.smoothedY);
+    }
+    this.landmarkBuffer.push(this.smoothedY);
   }
 
   private analyzeSignal(
@@ -89,17 +89,8 @@ export class BreathingDetector {
     const raw = buffer.toArray();
     const detrended = detrend(raw, detrendWindow);
     const filtered = bandpassFilter(detrended, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
-    const windowed = hammingWindow(filtered);
 
-    const n = nextPowerOf2(windowed.length * 4);
-    const re = new Float64Array(n);
-    const im = new Float64Array(n);
-    re.set(windowed);
-
-    fft(re, im);
-    const spectrum = magnitudeSpectrum(re, im);
-
-    const peak = findDominantPeak(spectrum, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
+    const peak = autocorrelationPeak(filtered, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
     if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
 
     const rawRate = peak.frequency * 60;
@@ -149,5 +140,7 @@ export class BreathingDetector {
     this.motionBuffer.clear();
     this.landmarkBuffer.clear();
     this.prevPixels = null;
+    this.smoothedY = 0;
+    this.smoothedYInit = false;
   }
 }

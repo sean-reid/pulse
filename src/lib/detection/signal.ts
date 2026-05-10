@@ -211,6 +211,57 @@ export function nextPowerOf2(n: number): number {
   return p;
 }
 
+export function autocorrelationPeak(
+  signal: Float64Array,
+  sampleRate: number,
+  minFreq: number,
+  maxFreq: number,
+): { frequency: number; confidence: number } | null {
+  const n = signal.length;
+  const minLag = Math.max(1, Math.floor(sampleRate / maxFreq));
+  const maxLag = Math.min(n - 1, Math.ceil(sampleRate / minFreq));
+  if (maxLag <= minLag) return null;
+
+  let energy = 0;
+  for (let i = 0; i < n; i++) energy += signal[i] * signal[i];
+  if (energy < 1e-10) return null;
+
+  let bestLag = minLag;
+  let bestCorr = -Infinity;
+
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let corr = 0;
+    for (let i = 0; i < n - lag; i++) {
+      corr += signal[i] * signal[i + lag];
+    }
+    corr /= energy;
+    if (corr > bestCorr) {
+      bestCorr = corr;
+      bestLag = lag;
+    }
+  }
+
+  if (bestCorr <= 0) return null;
+
+  let refined = bestLag;
+  if (bestLag > minLag && bestLag < maxLag) {
+    let prev = 0;
+    let next = 0;
+    for (let i = 0; i < n - bestLag - 1; i++) {
+      prev += signal[i] * signal[i + bestLag - 1];
+      next += signal[i] * signal[i + bestLag + 1];
+    }
+    prev /= energy;
+    next /= energy;
+    const d = prev - 2 * bestCorr + next;
+    if (Math.abs(d) > 1e-10) {
+      refined = bestLag + (0.5 * (prev - next)) / d;
+    }
+  }
+
+  return { frequency: sampleRate / refined, confidence: bestCorr };
+}
+
 export function findPeaks(signal: Float64Array, minDistance: number): number[] {
   let sum = 0;
   let sumSq = 0;
