@@ -1,4 +1,14 @@
-import { RingBuffer, detrend, bandpassFilter, autocorrelationPeak } from './signal';
+import {
+  RingBuffer,
+  detrend,
+  bandpassFilter,
+  autocorrelationPeak,
+  hammingWindow,
+  fft,
+  magnitudeSpectrum,
+  findDominantPeak,
+  nextPowerOf2,
+} from './signal';
 import type { ROI } from './rppg';
 import {
   BREATH_FREQ_MIN,
@@ -90,13 +100,49 @@ export class BreathingDetector {
     const detrended = detrend(raw, detrendWindow);
     const filtered = bandpassFilter(detrended, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
 
-    const peak = autocorrelationPeak(filtered, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
-    if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
+    const acResult = autocorrelationPeak(filtered, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
 
-    const rawRate = peak.frequency * 60;
+    const windowed = hammingWindow(filtered);
+    const n = nextPowerOf2(windowed.length * 4);
+    const re = new Float64Array(n);
+    const im = new Float64Array(n);
+    re.set(windowed);
+    fft(re, im);
+    const spectrum = magnitudeSpectrum(re, im);
+    const fftResult = findDominantPeak(spectrum, sampleRate, BREATH_FREQ_MIN, BREATH_FREQ_MAX);
+
+    let freq: number;
+    let confidence: number;
+
+    if (acResult && fftResult) {
+      const acFreq = acResult.frequency;
+      const fftFreq = fftResult.frequency;
+      const agree = Math.abs(acFreq - fftFreq) / Math.max(acFreq, fftFreq) < 0.1;
+      if (agree) {
+        freq = (acFreq + fftFreq) / 2;
+        confidence = Math.max(acResult.confidence, fftResult.confidence);
+      } else if (acResult.confidence > fftResult.confidence) {
+        freq = acFreq;
+        confidence = acResult.confidence;
+      } else {
+        freq = fftFreq;
+        confidence = fftResult.confidence;
+      }
+    } else if (acResult) {
+      freq = acResult.frequency;
+      confidence = acResult.confidence;
+    } else if (fftResult) {
+      freq = fftResult.frequency;
+      confidence = fftResult.confidence;
+    } else {
+      return null;
+    }
+
+    if (confidence < MIN_CONFIDENCE) return null;
+    const rawRate = freq * 60;
     if (rawRate < BREATH_MIN || rawRate > BREATH_MAX) return null;
 
-    return { rate: rawRate, confidence: peak.confidence };
+    return { rate: rawRate, confidence };
   }
 
   getEstimates(sampleRate: number, landmarkSampleRate: number): BreathEstimate[] {
