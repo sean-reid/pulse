@@ -205,7 +205,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       init();
       running = true;
       appState.status = 'calibrating';
-      loop();
+      animationId = requestAnimationFrame(loop);
     },
     stop() {
       running = false;
