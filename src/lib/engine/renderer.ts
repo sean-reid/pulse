@@ -1,9 +1,9 @@
 import {
   PASSTHROUGH_VERT,
   DISPLAY_VERT,
+  DISPLAY_FRAG,
   MOTION_AMP_FRAG,
   MOTION_AMP_INIT_FRAG,
-  BLUR_FRAG,
 } from './shaders';
 
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
@@ -58,8 +58,7 @@ export interface RendererState {
   canvas: HTMLCanvasElement;
   width: number;
   height: number;
-  blurHProgram: WebGLProgram;
-  blurVDisplayProgram: WebGLProgram;
+  displayProgram: WebGLProgram;
   motionAmpProgram: WebGLProgram;
   motionAmpInitProgram: WebGLProgram;
   videoTexture: WebGLTexture;
@@ -94,8 +93,7 @@ export function initRenderer(
   canvas.width = width;
   canvas.height = height;
 
-  const blurHProgram = createProgram(gl, PASSTHROUGH_VERT, BLUR_FRAG);
-  const blurVDisplayProgram = createProgram(gl, DISPLAY_VERT, BLUR_FRAG);
+  const displayProgram = createProgram(gl, DISPLAY_VERT, DISPLAY_FRAG);
   const motionAmpProgram = createProgram(gl, PASSTHROUGH_VERT, MOTION_AMP_FRAG);
   const motionAmpInitProgram = createProgram(gl, PASSTHROUGH_VERT, MOTION_AMP_INIT_FRAG);
 
@@ -161,8 +159,7 @@ export function initRenderer(
     canvas,
     width,
     height,
-    blurHProgram,
-    blurVDisplayProgram,
+    displayProgram,
     motionAmpProgram,
     motionAmpInitProgram,
     videoTexture,
@@ -198,7 +195,7 @@ export interface AmpParams {
   breathAlpha1: number;
   breathAlpha2: number;
   pulseAmp: number;
-  breathAmp: number;
+  breathDisplacement: number;
   cardiacCos: number;
   cardiacSin: number;
   corrAlpha: number;
@@ -360,7 +357,7 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha1'), params.breathAlpha1);
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha2'), params.breathAlpha2);
   gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAmp'), params.pulseAmp);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_breathAmp'), params.breathAmp);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_breathDisplacement'), params.breathDisplacement);
   gl.uniform1f(gl.getUniformLocation(program, 'u_cardiacCos'), params.cardiacCos);
   gl.uniform1f(gl.getUniformLocation(program, 'u_cardiacSin'), params.cardiacSin);
   gl.uniform1f(gl.getUniformLocation(program, 'u_corrAlpha'), params.corrAlpha);
@@ -374,40 +371,16 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
 }
 
 export function renderToScreen(state: RendererState): void {
-  const { gl, quadVAO, width, height } = state;
+  const { gl, quadVAO } = state;
   const curr = state.pingPongIndex;
-  const other = 1 - curr;
 
-  // Pass 1: horizontal blur — read amplified display, write to other display slot
-  gl.useProgram(state.blurHProgram);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, state.framebuffers[other]);
-  gl.framebufferTexture2D(
-    gl.FRAMEBUFFER,
-    gl.COLOR_ATTACHMENT0,
-    gl.TEXTURE_2D,
-    state.displayTextures[other],
-    0,
-  );
-  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
-
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, state.displayTextures[curr]);
-  gl.uniform1i(gl.getUniformLocation(state.blurHProgram, 'u_texture'), 0);
-  gl.uniform2f(gl.getUniformLocation(state.blurHProgram, 'u_direction'), 1.0 / width, 0);
-
-  gl.viewport(0, 0, width, height);
-  gl.bindVertexArray(quadVAO);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-  // Pass 2: vertical blur + mirror flip — read h-blurred, draw to screen
-  gl.useProgram(state.blurVDisplayProgram);
+  gl.useProgram(state.displayProgram);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, state.canvas.width, state.canvas.height);
 
   gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, state.displayTextures[other]);
-  gl.uniform1i(gl.getUniformLocation(state.blurVDisplayProgram, 'u_texture'), 0);
-  gl.uniform2f(gl.getUniformLocation(state.blurVDisplayProgram, 'u_direction'), 0, 1.0 / height);
+  gl.bindTexture(gl.TEXTURE_2D, state.displayTextures[curr]);
+  gl.uniform1i(gl.getUniformLocation(state.displayProgram, 'u_texture'), 0);
 
   gl.bindVertexArray(quadVAO);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -415,8 +388,7 @@ export function renderToScreen(state: RendererState): void {
 
 export function destroyRenderer(state: RendererState): void {
   const { gl } = state;
-  gl.deleteProgram(state.blurHProgram);
-  gl.deleteProgram(state.blurVDisplayProgram);
+  gl.deleteProgram(state.displayProgram);
   gl.deleteProgram(state.motionAmpProgram);
   gl.deleteProgram(state.motionAmpInitProgram);
   gl.deleteTexture(state.videoTexture);

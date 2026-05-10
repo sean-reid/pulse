@@ -62,6 +62,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   const bpmHistory: number[] = [];
 
   let cardiacPhase = 0;
+  let breathPhase = 0;
   let guidedBlend = 0;
   const corrAlpha = 1 - Math.exp(-1 / (CORR_TAU_S * CAMERA_FPS));
 
@@ -107,13 +108,19 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       guidedBlend = Math.max(0, guidedBlend - 1 / (BLEND_DECAY_S * CAMERA_FPS));
     }
 
+    if (appState.breathingRate !== null) {
+      breathPhase =
+        (breathPhase + (2 * Math.PI * appState.breathingRate) / (60 * CAMERA_FPS)) %
+        (2 * Math.PI);
+    }
+
     const ampParams: AmpParams = {
       pulseAlpha1: iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS),
       pulseAlpha2: iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS),
       breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
       pulseAmp: AMPLIFICATION,
-      breathAmp: AMPLIFICATION,
+      breathDisplacement: appState.breathingRate !== null ? Math.sin(breathPhase) : 0,
       cardiacCos: Math.cos(cardiacPhase),
       cardiacSin: Math.sin(cardiacPhase),
       corrAlpha,
@@ -149,6 +156,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
             calibrationFrames = 0;
             bpmHistory.length = 0;
             cardiacPhase = 0;
+            breathPhase = 0;
             guidedBlend = 0;
           }
         }
@@ -224,6 +232,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       lastVideoTime = -1;
       bpmHistory.length = 0;
       cardiacPhase = 0;
+      breathPhase = 0;
       guidedBlend = 0;
     },
   };

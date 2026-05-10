@@ -24,6 +24,18 @@ void main() {
 }
 `;
 
+export const DISPLAY_FRAG = `#version 300 es
+precision highp float;
+
+uniform sampler2D u_texture;
+in vec2 v_texCoord;
+out vec4 fragColor;
+
+void main() {
+  fragColor = vec4(texture(u_texture, v_texCoord).rgb, 1.0);
+}
+`;
+
 export const MOTION_AMP_FRAG = `#version 300 es
 precision highp float;
 
@@ -39,7 +51,7 @@ uniform float u_pulseAlpha2;
 uniform float u_breathAlpha1;
 uniform float u_breathAlpha2;
 uniform float u_pulseAmp;
-uniform float u_breathAmp;
+uniform float u_breathDisplacement;
 uniform float u_cardiacCos;
 uniform float u_cardiacSin;
 uniform float u_corrAlpha;
@@ -70,7 +82,6 @@ void main() {
   vec3 bL2 = texture(u_breathLow2, v_texCoord).rgb;
   vec3 bL1New = bL1 + u_breathAlpha1 * (current - bL1);
   vec3 bL2New = bL2 + u_breathAlpha2 * (current - bL2);
-  vec3 breathBand = bL1New - bL2New;
 
   float mask = texture(u_mask, v_texCoord).r;
 
@@ -100,15 +111,11 @@ void main() {
     ? rawPulse * (pulseLimit * tanh(pulseLen / pulseLimit) / pulseLen)
     : vec3(0.0);
 
-  // --- Breathing amplification ---
-  vec3 rawBreath = u_breathAmp * (1.0 - mask * 0.5) * breathBand;
-  float breathLen = length(rawBreath);
-  float breathLimit = 0.30;
-  vec3 breathDelta = breathLen > 1e-6
-    ? rawBreath * (breathLimit * tanh(breathLen / breathLimit) / breathLen)
-    : vec3(0.0);
+  // --- Breathing: geometric displacement (chest only) ---
+  vec2 breathOffset = vec2(0.0, u_breathDisplacement * 0.012 * (1.0 - mask));
+  vec3 displaced = texture(u_currentFrame, v_texCoord + breathOffset).rgb;
 
-  vec3 amplified = current + pulseDelta + breathDelta;
+  vec3 amplified = displaced + pulseDelta;
 
   out_display = vec4(clamp(amplified, 0.0, 1.0), 1.0);
   out_pulseLow1 = vec4(pL1New, 1.0);
@@ -140,28 +147,5 @@ void main() {
   out_breathLow1 = color;
   out_breathLow2 = color;
   out_pulseCorr = vec4(0.0, 0.0, 0.0, 1.0);
-}
-`;
-
-export const BLUR_FRAG = `#version 300 es
-precision highp float;
-
-uniform sampler2D u_texture;
-uniform vec2 u_direction;
-in vec2 v_texCoord;
-out vec4 fragColor;
-
-void main() {
-  // 5-tap separable Gaussian, sigma ~ 1.2
-  const float w0 = 0.3434;
-  const float w1 = 0.2428;
-  const float w2 = 0.0855;
-
-  vec3 result = texture(u_texture, v_texCoord).rgb * w0;
-  result += texture(u_texture, v_texCoord + 1.0 * u_direction).rgb * w1;
-  result += texture(u_texture, v_texCoord - 1.0 * u_direction).rgb * w1;
-  result += texture(u_texture, v_texCoord + 2.0 * u_direction).rgb * w2;
-  result += texture(u_texture, v_texCoord - 2.0 * u_direction).rgb * w2;
-  fragColor = vec4(result, 1.0);
 }
 `;
