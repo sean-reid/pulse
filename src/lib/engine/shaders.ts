@@ -85,7 +85,7 @@ void main() {
   float dx = v_texCoord.x - u_bodyCenter.x;
   float dy = abs(v_texCoord.y - u_bodyCenter.y);
   float taper = 1.0 - smoothstep(0.0, 0.2, dy);
-  float expansion = max(0.0, u_breathSignal) * bodyMask * taper * 0.15;
+  float expansion = max(0.0, u_breathSignal) * bodyMask * taper * 0.30;
   float shrink = 1.0 / (1.0 + expansion);
   vec2 warpedCoord = vec2(u_bodyCenter.x + dx * shrink, v_texCoord.y);
   vec3 pixel = texture(u_currentFrame, warpedCoord).rgb;
@@ -93,9 +93,9 @@ void main() {
   // Pulse: multiplicative skin-tone warming from global cardiac signal
   float flush = u_pulseSignal * faceMask;
   vec3 amplified = pixel * vec3(
-    1.0 + flush * 0.22,
-    1.0 - flush * 0.07,
-    1.0 - flush * 0.08
+    1.0 + flush * 0.40,
+    1.0 - flush * 0.12,
+    1.0 - flush * 0.14
   );
 
   out_display = vec4(clamp(amplified, 0.0, 1.0), 1.0);
