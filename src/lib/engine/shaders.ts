@@ -75,34 +75,35 @@ void main() {
   float mask = texture(u_mask, v_texCoord).r;
 
   // --- Pulse amplification: broadband + phase-coherent beamforming ---
-  const vec3 tintDir = normalize(vec3(1.3, 0.85, 0.85));
-  vec3 pulseTinted = pulseChroma * vec3(1.3, 0.85, 0.85);
+  const vec3 flushTint = vec3(1.8, 0.6, 0.6);
+  const vec3 flushDir = normalize(flushTint);
+  vec3 pulseTinted = pulseChroma * flushTint;
 
   // Broadband path (works before BPM detection)
-  vec3 broadband = u_pulseAmp * 1.5 * mask * pulseTinted;
+  vec3 broadband = u_pulseAmp * 4.0 * mask * pulseTinted;
 
   // Phase-coherent path: complex phasor correlation (cardiac beamforming)
   vec2 prevCorr = texture(u_pulseCorr, v_texCoord).rg;
-  float pulseSignal = dot(pulseTinted, tintDir);
+  float pulseSignal = dot(pulseTinted, flushDir);
   vec2 corrUpdate = pulseSignal * vec2(u_cardiacCos, -u_cardiacSin);
   vec2 corrNew = prevCorr + u_corrAlpha * (corrUpdate - prevCorr);
   float guidedSignal = corrNew.r * u_cardiacCos - corrNew.g * u_cardiacSin;
-  vec3 guided = u_pulseAmp * 3.0 * mask * guidedSignal * tintDir;
+  vec3 guided = u_pulseAmp * 8.0 * mask * guidedSignal * flushDir;
 
   // Crossfade from broadband to phase-coherent as confidence builds
   vec3 rawPulse = mix(broadband, guided, u_guidedBlend);
 
   // Soft compression (tanh)
   float pulseLen = length(rawPulse);
-  float pulseLimit = 0.10;
+  float pulseLimit = 0.30;
   vec3 pulseDelta = pulseLen > 1e-6
     ? rawPulse * (pulseLimit * tanh(pulseLen / pulseLimit) / pulseLen)
     : vec3(0.0);
 
-  // --- Breathing amplification (unchanged) ---
+  // --- Breathing amplification ---
   vec3 rawBreath = u_breathAmp * (1.0 - mask * 0.5) * breathBand;
   float breathLen = length(rawBreath);
-  float breathLimit = 0.15;
+  float breathLimit = 0.30;
   vec3 breathDelta = breathLen > 1e-6
     ? rawBreath * (breathLimit * tanh(breathLen / breathLimit) / breathLen)
     : vec3(0.0);
@@ -151,22 +152,16 @@ in vec2 v_texCoord;
 out vec4 fragColor;
 
 void main() {
-  // 9-tap separable Gaussian, sigma ~ 2.5
-  const float w0 = 0.1716;
-  const float w1 = 0.1584;
-  const float w2 = 0.1246;
-  const float w3 = 0.0835;
-  const float w4 = 0.0477;
+  // 5-tap separable Gaussian, sigma ~ 1.2
+  const float w0 = 0.3434;
+  const float w1 = 0.2428;
+  const float w2 = 0.0855;
 
   vec3 result = texture(u_texture, v_texCoord).rgb * w0;
   result += texture(u_texture, v_texCoord + 1.0 * u_direction).rgb * w1;
   result += texture(u_texture, v_texCoord - 1.0 * u_direction).rgb * w1;
   result += texture(u_texture, v_texCoord + 2.0 * u_direction).rgb * w2;
   result += texture(u_texture, v_texCoord - 2.0 * u_direction).rgb * w2;
-  result += texture(u_texture, v_texCoord + 3.0 * u_direction).rgb * w3;
-  result += texture(u_texture, v_texCoord - 3.0 * u_direction).rgb * w3;
-  result += texture(u_texture, v_texCoord + 4.0 * u_direction).rgb * w4;
-  result += texture(u_texture, v_texCoord - 4.0 * u_direction).rgb * w4;
   fragColor = vec4(result, 1.0);
 }
 `;

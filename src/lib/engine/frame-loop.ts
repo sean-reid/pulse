@@ -113,7 +113,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
       pulseAmp: AMPLIFICATION,
-      breathAmp: AMPLIFICATION * 1.5,
+      breathAmp: AMPLIFICATION,
       cardiacCos: Math.cos(cardiacPhase),
       cardiacSin: Math.sin(cardiacPhase),
       corrAlpha,

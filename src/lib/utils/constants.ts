@@ -19,7 +19,7 @@ export const SIGNAL_BUFFER_SIZE = 256;
 export const BPM_UPDATE_INTERVAL = 60;
 export const FACE_DETECT_INTERVAL = 3;
 
-export const AMPLIFICATION = 10;
+export const AMPLIFICATION = 25;
 
 export const ROI_SAMPLE_SIZE = 32;
 
