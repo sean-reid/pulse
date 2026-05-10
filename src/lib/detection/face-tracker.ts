@@ -82,12 +82,20 @@ export interface FaceOvalPoint {
   y: number;
 }
 
+export interface CheekRegion {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+}
+
 export interface FaceROIs {
   forehead: ROI;
   leftCheek: ROI;
   rightCheek: ROI;
   chest: ROI;
   oval: FaceOvalPoint[];
+  cheekRegions: [CheekRegion, CheekRegion];
   breathLandmarkY: number;
 }
 
@@ -128,7 +136,16 @@ export function detectFace(video: HTMLVideoElement, timestamp: number): FaceROIs
   }
   breathY /= breathIndices.length;
 
-  return { forehead, leftCheek, rightCheek, chest, oval, breathLandmarkY: breathY };
+  const cheekY = noseTip.y * h + faceHeight * 0.15;
+  const cheekOffsetX = faceHeight * 0.45;
+  const cheekRx = faceHeight * 0.25;
+  const cheekRy = faceHeight * 0.2;
+  const cheekRegions: [CheekRegion, CheekRegion] = [
+    { cx: noseTip.x * w - cheekOffsetX, cy: cheekY, rx: cheekRx, ry: cheekRy },
+    { cx: noseTip.x * w + cheekOffsetX, cy: cheekY, rx: cheekRx, ry: cheekRy },
+  ];
+
+  return { forehead, leftCheek, rightCheek, chest, oval, cheekRegions, breathLandmarkY: breathY };
 }
 
 function getFaceOval(landmarks: Landmark[], w: number, h: number): FaceOvalPoint[] {
@@ -160,6 +177,7 @@ let maskCtx: OffscreenCanvasRenderingContext2D | null = null;
 
 export function generateFaceMask(
   oval: FaceOvalPoint[],
+  cheeks: [CheekRegion, CheekRegion],
   videoW: number,
   videoH: number,
 ): OffscreenCanvas {
@@ -168,21 +186,46 @@ export function generateFaceMask(
     maskCtx = maskCanvas.getContext('2d')!;
   }
 
-  maskCtx!.clearRect(0, 0, MASK_W, MASK_H);
-  maskCtx!.fillStyle = 'white';
-  maskCtx!.beginPath();
+  const ctx = maskCtx!;
+  ctx.clearRect(0, 0, MASK_W, MASK_H);
 
   const sx = MASK_W / videoW;
   const sy = MASK_H / videoH;
 
-  for (let i = 0; i < oval.length; i++) {
-    const x = oval[i].x * sx;
-    const y = oval[i].y * sy;
-    if (i === 0) maskCtx!.moveTo(x, y);
-    else maskCtx!.lineTo(x, y);
+  let cx = 0;
+  let maxY = -Infinity;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const p of oval) {
+    cx += p.x;
+    if (p.y > maxY) maxY = p.y;
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
   }
-  maskCtx!.closePath();
-  maskCtx!.fill();
+  cx /= oval.length;
+  const faceW = maxX - minX;
+  const neckW = faceW * 0.6;
+  const shoulderW = faceW * 2.2;
+  const neckY = maxY;
+  const shoulderY = maxY + faceW * 0.4;
+
+  ctx.fillStyle = 'rgb(0, 255, 0)';
+  ctx.beginPath();
+  ctx.moveTo((cx - neckW / 2) * sx, neckY * sy);
+  ctx.lineTo((cx - shoulderW / 2) * sx, shoulderY * sy);
+  ctx.lineTo((cx - shoulderW / 2) * sx, MASK_H);
+  ctx.lineTo((cx + shoulderW / 2) * sx, MASK_H);
+  ctx.lineTo((cx + shoulderW / 2) * sx, shoulderY * sy);
+  ctx.lineTo((cx + neckW / 2) * sx, neckY * sy);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgb(255, 0, 0)';
+  for (const cheek of cheeks) {
+    ctx.beginPath();
+    ctx.ellipse(cheek.cx * sx, cheek.cy * sy, cheek.rx * sx, cheek.ry * sy, 0, 0, 2 * Math.PI);
+    ctx.fill();
+  }
 
   return maskCanvas;
 }

@@ -50,12 +50,9 @@ uniform float u_pulseAlpha1;
 uniform float u_pulseAlpha2;
 uniform float u_breathAlpha1;
 uniform float u_breathAlpha2;
-uniform float u_pulseAmp;
-uniform float u_breathDisplacement;
-uniform float u_cardiacCos;
-uniform float u_cardiacSin;
-uniform float u_corrAlpha;
-uniform float u_guidedBlend;
+uniform float u_pulseSignal;
+uniform float u_breathSignal;
+uniform vec2 u_bodyCenter;
 
 in vec2 v_texCoord;
 
@@ -73,56 +70,40 @@ void main() {
   vec3 pL2 = texture(u_pulseLow2, v_texCoord).rgb;
   vec3 pL1New = pL1 + u_pulseAlpha1 * (current - pL1);
   vec3 pL2New = pL2 + u_pulseAlpha2 * (current - pL2);
-  vec3 pulseBand = pL1New - pL2New;
-
-  float pulseY = 0.299 * pulseBand.r + 0.587 * pulseBand.g + 0.114 * pulseBand.b;
-  vec3 pulseChroma = pulseBand - vec3(pulseY);
 
   vec3 bL1 = texture(u_breathLow1, v_texCoord).rgb;
   vec3 bL2 = texture(u_breathLow2, v_texCoord).rgb;
   vec3 bL1New = bL1 + u_breathAlpha1 * (current - bL1);
   vec3 bL2New = bL2 + u_breathAlpha2 * (current - bL2);
 
-  float mask = texture(u_mask, v_texCoord).r;
+  // Mask: R = face oval, G = face + body region
+  vec4 maskSample = texture(u_mask, v_texCoord);
+  float faceMask = maskSample.r;
+  float bodyMask = maskSample.g * (1.0 - faceMask);
 
-  // --- Pulse amplification: broadband + phase-coherent beamforming ---
-  const vec3 flushTint = vec3(1.8, 0.6, 0.6);
-  const vec3 flushDir = normalize(flushTint);
-  vec3 pulseTinted = pulseChroma * flushTint;
+  // Breathing: horizontal chest expansion, tapered vertically for natural bulge
+  float dx = v_texCoord.x - u_bodyCenter.x;
+  float dy = abs(v_texCoord.y - u_bodyCenter.y);
+  float taper = 1.0 - smoothstep(0.0, 0.2, dy);
+  float expansion = max(0.0, u_breathSignal) * bodyMask * taper * 0.15;
+  float shrink = 1.0 / (1.0 + expansion);
+  vec2 warpedCoord = vec2(u_bodyCenter.x + dx * shrink, v_texCoord.y);
+  vec3 pixel = texture(u_currentFrame, warpedCoord).rgb;
 
-  // Broadband path (works before BPM detection)
-  vec3 broadband = u_pulseAmp * 4.0 * mask * pulseTinted;
-
-  // Phase-coherent path: complex phasor correlation (cardiac beamforming)
-  vec2 prevCorr = texture(u_pulseCorr, v_texCoord).rg;
-  float pulseSignal = dot(pulseTinted, flushDir);
-  vec2 corrUpdate = pulseSignal * vec2(u_cardiacCos, -u_cardiacSin);
-  vec2 corrNew = prevCorr + u_corrAlpha * (corrUpdate - prevCorr);
-  float guidedSignal = corrNew.r * u_cardiacCos - corrNew.g * u_cardiacSin;
-  vec3 guided = u_pulseAmp * 8.0 * mask * guidedSignal * flushDir;
-
-  // Crossfade from broadband to phase-coherent as confidence builds
-  vec3 rawPulse = mix(broadband, guided, u_guidedBlend);
-
-  // Soft compression (tanh)
-  float pulseLen = length(rawPulse);
-  float pulseLimit = 0.30;
-  vec3 pulseDelta = pulseLen > 1e-6
-    ? rawPulse * (pulseLimit * tanh(pulseLen / pulseLimit) / pulseLen)
-    : vec3(0.0);
-
-  // --- Breathing: geometric displacement (chest only) ---
-  vec2 breathOffset = vec2(0.0, u_breathDisplacement * 0.012 * (1.0 - mask));
-  vec3 displaced = texture(u_currentFrame, v_texCoord + breathOffset).rgb;
-
-  vec3 amplified = displaced + pulseDelta;
+  // Pulse: multiplicative skin-tone warming from global cardiac signal
+  float flush = u_pulseSignal * faceMask;
+  vec3 amplified = pixel * vec3(
+    1.0 + flush * 0.22,
+    1.0 - flush * 0.07,
+    1.0 - flush * 0.08
+  );
 
   out_display = vec4(clamp(amplified, 0.0, 1.0), 1.0);
   out_pulseLow1 = vec4(pL1New, 1.0);
   out_pulseLow2 = vec4(pL2New, 1.0);
   out_breathLow1 = vec4(bL1New, 1.0);
   out_breathLow2 = vec4(bL2New, 1.0);
-  out_pulseCorr = vec4(corrNew, 0.0, 1.0);
+  out_pulseCorr = vec4(0.0, 0.0, 0.0, 1.0);
 }
 `;
 

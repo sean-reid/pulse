@@ -194,12 +194,10 @@ export interface AmpParams {
   pulseAlpha2: number;
   breathAlpha1: number;
   breathAlpha2: number;
-  pulseAmp: number;
-  breathDisplacement: number;
-  cardiacCos: number;
-  cardiacSin: number;
-  corrAlpha: number;
-  guidedBlend: number;
+  pulseSignal: number;
+  breathSignal: number;
+  bodyCenterX: number;
+  bodyCenterY: number;
 }
 
 export function renderMotionAmp(state: RendererState, params: AmpParams): void {
@@ -356,12 +354,13 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
   gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAlpha2'), params.pulseAlpha2);
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha1'), params.breathAlpha1);
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha2'), params.breathAlpha2);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAmp'), params.pulseAmp);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_breathDisplacement'), params.breathDisplacement);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_cardiacCos'), params.cardiacCos);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_cardiacSin'), params.cardiacSin);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_corrAlpha'), params.corrAlpha);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_guidedBlend'), params.guidedBlend);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_pulseSignal'), params.pulseSignal);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_breathSignal'), params.breathSignal);
+  gl.uniform2f(
+    gl.getUniformLocation(program, 'u_bodyCenter'),
+    params.bodyCenterX,
+    params.bodyCenterY,
+  );
 
   gl.viewport(0, 0, width, height);
   gl.bindVertexArray(quadVAO);

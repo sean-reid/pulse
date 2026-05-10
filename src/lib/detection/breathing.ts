@@ -139,6 +139,17 @@ export class BreathingDetector {
     return estimates;
   }
 
+  getInstantaneousSignal(): number {
+    if (this.landmarkBuffer.length < 20) return 0;
+    const arr = this.landmarkBuffer.toArray();
+    const len = arr.length;
+    const window = Math.min(20, len);
+    let mean = 0;
+    for (let i = len - window; i < len; i++) mean += arr[i];
+    mean /= window;
+    return arr[len - 1] - mean;
+  }
+
   reset(): void {
     this.motionBuffer.clear();
     this.landmarkBuffer.clear();

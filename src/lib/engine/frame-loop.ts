@@ -25,7 +25,6 @@ import {
   AMP_FREQ_MAX,
   BREATH_FREQ_MIN,
   BREATH_FREQ_MAX,
-  AMPLIFICATION,
   CAMERA_FPS,
   FACE_DETECT_INTERVAL,
   BPM_UPDATE_INTERVAL,
@@ -37,7 +36,6 @@ const FACE_GRACE_MS = 500;
 const FACE_RESET_MS = 10000;
 const BLEND_RAMP_S = 3;
 const BLEND_DECAY_S = 1;
-const CORR_TAU_S = 4;
 
 export interface FrameLoop {
   start: () => void;
@@ -62,9 +60,13 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   const bpmHistory: number[] = [];
 
   let cardiacPhase = 0;
-  let breathPhase = 0;
   let guidedBlend = 0;
-  const corrAlpha = 1 - Math.exp(-1 / (CORR_TAU_S * CAMERA_FPS));
+  let breathBaseline = 0;
+  let breathBaselineInit = false;
+  let breathSignalRaw = 0;
+  let smoothBreathSignal = 0;
+  let bodyCenterX = 0.5;
+  let bodyCenterY = 0.7;
 
   function updateRollingStats(bpm: number) {
     bpmHistory.push(bpm);
@@ -103,28 +105,24 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
     if (appState.bpm !== null) {
       cardiacPhase =
         (cardiacPhase + (2 * Math.PI * appState.bpm) / (60 * CAMERA_FPS)) % (2 * Math.PI);
-      guidedBlend = Math.min(1, guidedBlend + 1 / (BLEND_RAMP_S * CAMERA_FPS));
+      const confidence = appState.bpmConfidence ?? 0;
+      const targetBlend = Math.min(1, confidence * 1.5);
+      guidedBlend += (targetBlend - guidedBlend) / (BLEND_RAMP_S * CAMERA_FPS);
     } else {
       guidedBlend = Math.max(0, guidedBlend - 1 / (BLEND_DECAY_S * CAMERA_FPS));
     }
 
-    if (appState.breathingRate !== null) {
-      breathPhase =
-        (breathPhase + (2 * Math.PI * appState.breathingRate) / (60 * CAMERA_FPS)) %
-        (2 * Math.PI);
-    }
+    smoothBreathSignal += 0.5 * (breathSignalRaw - smoothBreathSignal);
 
     const ampParams: AmpParams = {
       pulseAlpha1: iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS),
       pulseAlpha2: iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS),
       breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
-      pulseAmp: AMPLIFICATION,
-      breathDisplacement: appState.breathingRate !== null ? Math.sin(breathPhase) : 0,
-      cardiacCos: Math.cos(cardiacPhase),
-      cardiacSin: Math.sin(cardiacPhase),
-      corrAlpha,
-      guidedBlend,
+      pulseSignal: Math.sin(cardiacPhase) * guidedBlend,
+      breathSignal: smoothBreathSignal,
+      bodyCenterX,
+      bodyCenterY,
     };
 
     renderMotionAmp(renderer, ampParams);
@@ -139,10 +137,28 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
           lastFaceTime = now;
           appState.faceDetected = true;
 
-          const mask = generateFaceMask(rois.oval, video.videoWidth, video.videoHeight);
+          const mask = generateFaceMask(
+            rois.oval,
+            rois.cheekRegions,
+            video.videoWidth,
+            video.videoHeight,
+          );
           uploadMask(renderer, mask);
 
           breathing.sampleLandmarks(rois.breathLandmarkY);
+
+          const rawY = rois.breathLandmarkY;
+          if (!breathBaselineInit) {
+            breathBaseline = rawY;
+            breathBaselineInit = true;
+          } else {
+            breathBaseline += 0.02 * (rawY - breathBaseline);
+          }
+          const normalizedDisp = -(rawY - breathBaseline) / video.videoHeight;
+          breathSignalRaw = normalizedDisp * 80;
+
+          bodyCenterX = (rois.chest.x + rois.chest.width / 2) / video.videoWidth;
+          bodyCenterY = (rois.chest.y + rois.chest.height / 2) / video.videoHeight;
         } else if (lastFaceTime > 0 && now - lastFaceTime > FACE_GRACE_MS) {
           currentROIs = null;
           appState.faceDetected = false;
@@ -156,8 +172,11 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
             calibrationFrames = 0;
             bpmHistory.length = 0;
             cardiacPhase = 0;
-            breathPhase = 0;
             guidedBlend = 0;
+            breathBaseline = 0;
+            breathBaselineInit = false;
+            breathSignalRaw = 0;
+            smoothBreathSignal = 0;
           }
         }
       }
@@ -232,8 +251,11 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       lastVideoTime = -1;
       bpmHistory.length = 0;
       cardiacPhase = 0;
-      breathPhase = 0;
       guidedBlend = 0;
+      breathBaseline = 0;
+      breathBaselineInit = false;
+      breathSignalRaw = 0;
+      smoothBreathSignal = 0;
     },
   };
 }
