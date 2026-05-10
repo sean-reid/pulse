@@ -13,7 +13,6 @@ import { RateTracker } from './rate-tracker';
 import type { RppgResult } from './rppg';
 import type { BreathEstimate } from './breathing';
 import {
-  CAMERA_FPS,
   BPM_MIN,
   BPM_MAX,
   BREATH_FREQ_MIN,
@@ -69,6 +68,7 @@ export class VitalsFusion {
     rppgResult: RppgResult | null,
     breathEstimates: BreathEstimate[],
     now: number,
+    sampleRate: number,
   ): FusedVitals {
     const dt = this.lastUpdateTime > 0 ? (now - this.lastUpdateTime) / 1000 : 2;
     this.lastUpdateTime = now;
@@ -88,12 +88,12 @@ export class VitalsFusion {
         measurementVariance(HR_BASE_VAR, rppgResult.confidence),
       );
 
-      const minPeakDist = Math.floor((CAMERA_FPS * 60) / BPM_MAX);
+      const minPeakDist = Math.floor((sampleRate * 60) / BPM_MAX);
       const peaks = findPeaks(rppgResult.filteredSignal, minPeakDist);
       peakPositions = peaks;
 
       for (let i = 1; i < peaks.length; i++) {
-        const rrSec = (peaks[i] - peaks[i - 1]) / CAMERA_FPS;
+        const rrSec = (peaks[i] - peaks[i - 1]) / sampleRate;
         if (rrSec >= MIN_RR_SEC && rrSec <= MAX_RR_SEC) {
           rrIntervals.push(rrSec);
         }
@@ -101,7 +101,7 @@ export class VitalsFusion {
     }
 
     if (peakPositions.length >= MIN_BEATS_FOR_RSA && rrIntervals.length >= MIN_BEATS_FOR_RSA - 1) {
-      const rsaResult = this.extractRSABreathing(peakPositions, rrIntervals);
+      const rsaResult = this.extractRSABreathing(peakPositions, rrIntervals, sampleRate);
       if (rsaResult) {
         this.breathTracker.update(
           rsaResult.rate,
@@ -139,10 +139,11 @@ export class VitalsFusion {
   private extractRSABreathing(
     peakPositions: number[],
     rrIntervals: number[],
+    sampleRate: number,
   ): { rate: number; confidence: number } | null {
     const times: number[] = [];
     for (let i = 1; i < peakPositions.length; i++) {
-      times.push(peakPositions[i] / CAMERA_FPS);
+      times.push(peakPositions[i] / sampleRate);
     }
 
     if (times.length < 2 || times.length !== rrIntervals.length) return null;

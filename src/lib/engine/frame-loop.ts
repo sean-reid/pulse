@@ -49,10 +49,10 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   let running = false;
   let lastVideoTime = -1;
   let frameCount = 0;
+  let measuredFps = CAMERA_FPS;
 
   const rppg = new RppgDetector();
-  const landmarkSampleRate = CAMERA_FPS / FACE_DETECT_INTERVAL;
-  const breathing = new BreathingDetector(landmarkSampleRate);
+  const breathing = new BreathingDetector();
   const fusion = new VitalsFusion();
   let currentROIs: FaceROIs | null = null;
   let calibrationFrames = 0;
@@ -101,6 +101,10 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       lastVideoTime < 0 ? 1 / CAMERA_FPS : Math.min(0.1, video.currentTime - lastVideoTime);
     lastVideoTime = video.currentTime;
     frameCount++;
+
+    if (dt > 0 && dt < 0.1) {
+      measuredFps += 0.05 * (1 / dt - measuredFps);
+    }
 
     uploadVideoFrame(renderer, video);
 
@@ -200,9 +204,12 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
         }
 
         if (frameCount % BPM_UPDATE_INTERVAL === 0) {
-          const rppgResult = rppg.computeBpm();
-          const breathEstimates = breathing.getEstimates();
-          const fused = fusion.update(rppgResult, breathEstimates, performance.now());
+          const rppgResult = rppg.computeBpm(measuredFps);
+          const breathEstimates = breathing.getEstimates(
+            measuredFps,
+            measuredFps / FACE_DETECT_INTERVAL,
+          );
+          const fused = fusion.update(rppgResult, breathEstimates, performance.now(), measuredFps);
 
           if (fused.bpm !== null) {
             appState.bpm = fused.bpm;

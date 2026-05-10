@@ -14,7 +14,6 @@ import {
   BREATH_FREQ_MAX,
   BREATH_MIN,
   BREATH_MAX,
-  CAMERA_FPS,
   ROI_SAMPLE_SIZE,
 } from '../utils/constants';
 
@@ -38,10 +37,8 @@ export class BreathingDetector {
   private sampleCanvas: OffscreenCanvas;
   private sampleCtx: OffscreenCanvasRenderingContext2D;
   private prevPixels: Uint8ClampedArray | null = null;
-  private landmarkSampleRate: number;
 
-  constructor(landmarkSampleRate: number) {
-    this.landmarkSampleRate = landmarkSampleRate;
+  constructor() {
     this.sampleCanvas = new OffscreenCanvas(ROI_SAMPLE_SIZE, ROI_SAMPLE_SIZE);
     this.sampleCtx = this.sampleCanvas.getContext('2d', { willReadFrequently: true })!;
   }
@@ -113,13 +110,13 @@ export class BreathingDetector {
     return { rate: rawRate, confidence: peak.confidence };
   }
 
-  getEstimates(): BreathEstimate[] {
+  getEstimates(sampleRate: number, landmarkSampleRate: number): BreathEstimate[] {
     const estimates: BreathEstimate[] = [];
 
     const motionResult = this.analyzeSignal(
       this.motionBuffer,
       MIN_MOTION_SAMPLES,
-      CAMERA_FPS,
+      sampleRate,
       MOTION_DETREND_WINDOW,
     );
     if (motionResult) {
@@ -129,7 +126,7 @@ export class BreathingDetector {
     const landmarkResult = this.analyzeSignal(
       this.landmarkBuffer,
       MIN_LANDMARK_SAMPLES,
-      this.landmarkSampleRate,
+      landmarkSampleRate,
       LANDMARK_DETREND_WINDOW,
     );
     if (landmarkResult) {

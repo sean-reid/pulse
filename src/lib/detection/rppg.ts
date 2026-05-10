@@ -14,7 +14,6 @@ import {
   BPM_FREQ_MAX,
   BPM_MIN,
   BPM_MAX,
-  CAMERA_FPS,
   ROI_SAMPLE_SIZE,
 } from '../utils/constants';
 
@@ -168,12 +167,12 @@ export class RppgDetector {
     return pulse;
   }
 
-  computeBpm(): RppgResult | null {
+  computeBpm(sampleRate: number): RppgResult | null {
     if (this.bufferG.length < MIN_SAMPLES) return null;
 
     const posPulse = this.computePosPulse();
     const detrended = detrend(posPulse);
-    const filtered = bandpassFilter(detrended, CAMERA_FPS, BPM_FREQ_MIN, BPM_FREQ_MAX);
+    const filtered = bandpassFilter(detrended, sampleRate, BPM_FREQ_MIN, BPM_FREQ_MAX);
     const windowed = hammingWindow(filtered);
 
     const n = nextPowerOf2(windowed.length);
@@ -184,7 +183,7 @@ export class RppgDetector {
     fft(re, im);
     const spectrum = magnitudeSpectrum(re, im);
 
-    const peak = findDominantPeak(spectrum, CAMERA_FPS, BPM_FREQ_MIN, BPM_FREQ_MAX);
+    const peak = findDominantPeak(spectrum, sampleRate, BPM_FREQ_MIN, BPM_FREQ_MAX);
     if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
 
     const rawBpm = peak.frequency * 60;
