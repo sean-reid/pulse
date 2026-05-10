@@ -105,8 +105,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
     uploadVideoFrame(renderer, video);
 
     if (appState.bpm !== null) {
-      cardiacPhase =
-        (cardiacPhase + (2 * Math.PI * appState.bpm * dt) / 60) % (2 * Math.PI);
+      cardiacPhase = (cardiacPhase + (2 * Math.PI * appState.bpm * dt) / 60) % (2 * Math.PI);
       const confidence = appState.bpmConfidence ?? 0;
       const targetBlend = Math.min(1, confidence * 1.5);
       guidedBlend += (targetBlend - guidedBlend) * Math.min(1, dt / BLEND_RAMP_S);
