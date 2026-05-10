@@ -59,10 +59,13 @@ function measurementVariance(baseVar: number, confidence: number): number {
   return baseVar / Math.max(confidence, CONFIDENCE_FLOOR);
 }
 
+const BREATH_STALE_MS = 8000;
+
 export class VitalsFusion {
   private hrTracker = new RateTracker(0.25);
   private breathTracker = new RateTracker(0.06);
   private lastUpdateTime = 0;
+  private lastBreathUpdateTime = 0;
 
   update(
     rppgResult: RppgResult | null,
@@ -113,6 +116,7 @@ export class VitalsFusion {
     for (const est of breathEstimates) {
       const baseVar = est.source === 'landmark' ? BREATH_LANDMARK_BASE_VAR : BREATH_MOTION_BASE_VAR;
       this.breathTracker.update(est.rate, measurementVariance(baseVar, est.confidence));
+      this.lastBreathUpdateTime = now;
     }
 
     let hrv: HrvMetrics | null = null;
@@ -121,7 +125,10 @@ export class VitalsFusion {
     }
 
     const bpm = this.hrTracker.initialized ? Math.round(this.hrTracker.rate) : null;
-    const breathRate = this.breathTracker.initialized ? Math.round(this.breathTracker.rate) : null;
+    const breathStale =
+      this.lastBreathUpdateTime > 0 && now - this.lastBreathUpdateTime > BREATH_STALE_MS;
+    const breathRate =
+      this.breathTracker.initialized && !breathStale ? Math.round(this.breathTracker.rate) : null;
 
     return {
       bpm: bpm !== null && bpm >= BPM_MIN && bpm <= BPM_MAX ? bpm : null,
@@ -183,6 +190,7 @@ export class VitalsFusion {
     this.hrTracker.reset();
     this.breathTracker.reset();
     this.lastUpdateTime = 0;
+    this.lastBreathUpdateTime = 0;
   }
 }
 
