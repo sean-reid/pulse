@@ -34,6 +34,9 @@ import {
 
 const MAX_HISTORY = 60;
 const FACE_LOST_TIMEOUT_MS = 3000;
+const BLEND_RAMP_S = 3;
+const BLEND_DECAY_S = 1;
+const CORR_TAU_S = 4;
 
 export interface FrameLoop {
   start: () => void;
@@ -56,6 +59,10 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
   let calibrationFrames = 0;
   let lastFaceTime = 0;
   const bpmHistory: number[] = [];
+
+  let cardiacPhase = 0;
+  let guidedBlend = 0;
+  const corrAlpha = 1 - Math.exp(-1 / (CORR_TAU_S * CAMERA_FPS));
 
   function updateRollingStats(bpm: number) {
     bpmHistory.push(bpm);
@@ -97,6 +104,14 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
     uploadVideoFrame(renderer, video);
 
+    if (appState.bpm !== null) {
+      cardiacPhase =
+        (cardiacPhase + (2 * Math.PI * appState.bpm) / (60 * CAMERA_FPS)) % (2 * Math.PI);
+      guidedBlend = Math.min(1, guidedBlend + 1 / (BLEND_RAMP_S * CAMERA_FPS));
+    } else {
+      guidedBlend = Math.max(0, guidedBlend - 1 / (BLEND_DECAY_S * CAMERA_FPS));
+    }
+
     const ampParams: AmpParams = {
       pulseAlpha1: iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS),
       pulseAlpha2: iirCoefficient(AMP_FREQ_MAX, CAMERA_FPS),
@@ -104,6 +119,10 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
       pulseAmp: AMPLIFICATION,
       breathAmp: AMPLIFICATION * 1.5,
+      cardiacCos: Math.cos(cardiacPhase),
+      cardiacSin: Math.sin(cardiacPhase),
+      corrAlpha,
+      guidedBlend,
     };
 
     renderMotionAmp(renderer, ampParams);
@@ -138,6 +157,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
             fusion.reset();
             calibrationFrames = 0;
             bpmHistory.length = 0;
+            cardiacPhase = 0;
+            guidedBlend = 0;
           }
         }
       }
@@ -211,6 +232,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       frameCount = 0;
       lastVideoTime = -1;
       bpmHistory.length = 0;
+      cardiacPhase = 0;
+      guidedBlend = 0;
     },
   };
 }

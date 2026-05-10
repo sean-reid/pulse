@@ -67,6 +67,7 @@ export interface RendererState {
   pulseLow2Textures: [WebGLTexture, WebGLTexture];
   breathLow1Textures: [WebGLTexture, WebGLTexture];
   breathLow2Textures: [WebGLTexture, WebGLTexture];
+  pulseCorrTextures: [WebGLTexture, WebGLTexture];
   displayTextures: [WebGLTexture, WebGLTexture];
   maskTexture: WebGLTexture;
   framebuffers: [WebGLFramebuffer, WebGLFramebuffer];
@@ -113,6 +114,10 @@ export function initRenderer(
     createTexture(gl, width, height),
   ];
   const breathLow2Textures: [WebGLTexture, WebGLTexture] = [
+    createTexture(gl, width, height),
+    createTexture(gl, width, height),
+  ];
+  const pulseCorrTextures: [WebGLTexture, WebGLTexture] = [
     createTexture(gl, width, height),
     createTexture(gl, width, height),
   ];
@@ -165,6 +170,7 @@ export function initRenderer(
     pulseLow2Textures,
     breathLow1Textures,
     breathLow2Textures,
+    pulseCorrTextures,
     displayTextures,
     maskTexture,
     framebuffers,
@@ -193,6 +199,10 @@ export interface AmpParams {
   breathAlpha2: number;
   pulseAmp: number;
   breathAmp: number;
+  cardiacCos: number;
+  cardiacSin: number;
+  corrAlpha: number;
+  guidedBlend: number;
 }
 
 export function renderMotionAmp(state: RendererState, params: AmpParams): void {
@@ -206,6 +216,7 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
     gl.COLOR_ATTACHMENT2,
     gl.COLOR_ATTACHMENT3,
     gl.COLOR_ATTACHMENT4,
+    gl.COLOR_ATTACHMENT5,
   ];
 
   if (!state.initialized) {
@@ -244,6 +255,13 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
       gl.COLOR_ATTACHMENT4,
       gl.TEXTURE_2D,
       state.breathLow2Textures[next],
+      0,
+    );
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT5,
+      gl.TEXTURE_2D,
+      state.pulseCorrTextures[next],
       0,
     );
     gl.drawBuffers(drawBuffers);
@@ -300,6 +318,13 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
     state.breathLow2Textures[next],
     0,
   );
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    gl.COLOR_ATTACHMENT5,
+    gl.TEXTURE_2D,
+    state.pulseCorrTextures[next],
+    0,
+  );
   gl.drawBuffers(drawBuffers);
 
   gl.activeTexture(gl.TEXTURE0);
@@ -326,12 +351,20 @@ export function renderMotionAmp(state: RendererState, params: AmpParams): void {
   gl.bindTexture(gl.TEXTURE_2D, state.maskTexture);
   gl.uniform1i(gl.getUniformLocation(program, 'u_mask'), 5);
 
+  gl.activeTexture(gl.TEXTURE6);
+  gl.bindTexture(gl.TEXTURE_2D, state.pulseCorrTextures[curr]);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_pulseCorr'), 6);
+
   gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAlpha1'), params.pulseAlpha1);
   gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAlpha2'), params.pulseAlpha2);
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha1'), params.breathAlpha1);
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAlpha2'), params.breathAlpha2);
   gl.uniform1f(gl.getUniformLocation(program, 'u_pulseAmp'), params.pulseAmp);
   gl.uniform1f(gl.getUniformLocation(program, 'u_breathAmp'), params.breathAmp);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_cardiacCos'), params.cardiacCos);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_cardiacSin'), params.cardiacSin);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_corrAlpha'), params.corrAlpha);
+  gl.uniform1f(gl.getUniformLocation(program, 'u_guidedBlend'), params.guidedBlend);
 
   gl.viewport(0, 0, width, height);
   gl.bindVertexArray(quadVAO);
@@ -392,6 +425,7 @@ export function destroyRenderer(state: RendererState): void {
   for (const t of state.pulseLow2Textures) gl.deleteTexture(t);
   for (const t of state.breathLow1Textures) gl.deleteTexture(t);
   for (const t of state.breathLow2Textures) gl.deleteTexture(t);
+  for (const t of state.pulseCorrTextures) gl.deleteTexture(t);
   for (const t of state.displayTextures) gl.deleteTexture(t);
   for (const fb of state.framebuffers) gl.deleteFramebuffer(fb);
   gl.deleteVertexArray(state.quadVAO);
