@@ -33,7 +33,8 @@ import {
 } from '../utils/constants';
 
 const MAX_HISTORY = 60;
-const FACE_LOST_TIMEOUT_MS = 3000;
+const FACE_GRACE_MS = 500;
+const FACE_RESET_MS = 10000;
 const BLEND_RAMP_S = 3;
 const BLEND_DECAY_S = 1;
 const CORR_TAU_S = 4;
@@ -141,15 +142,11 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
           uploadMask(renderer, mask);
 
           breathing.sampleLandmarks(rois.breathLandmarkY);
-        } else {
+        } else if (lastFaceTime > 0 && now - lastFaceTime > FACE_GRACE_MS) {
           currentROIs = null;
           appState.faceDetected = false;
 
-          if (
-            lastFaceTime > 0 &&
-            now - lastFaceTime > FACE_LOST_TIMEOUT_MS &&
-            appState.status === 'active'
-          ) {
+          if (now - lastFaceTime > FACE_RESET_MS && appState.status === 'active') {
             appState.status = 'calibrating';
             appState.reset();
             rppg.reset();
