@@ -6,6 +6,7 @@ import {
   fft,
   magnitudeSpectrum,
   findDominantPeak,
+  autocorrelationPeak,
   nextPowerOf2,
 } from './signal';
 import { SpatialBeamformer } from './spatial-beamformer';
@@ -184,8 +185,55 @@ export class RppgDetector {
     const posPulse = this.computePosPulse();
     const detrended = detrend(posPulse);
     const filtered = bandpassFilter(detrended, sampleRate, BPM_FREQ_MIN, BPM_FREQ_MAX);
-    const windowed = hammingWindow(filtered);
 
+    const fftResult = this.estimateByFFT(filtered, sampleRate);
+    const acResult = this.estimateByAutocorrelation(filtered, sampleRate);
+
+    let rawBpm: number;
+    let confidence: number;
+
+    if (fftResult && acResult) {
+      const fftBpm = fftResult.frequency * 60;
+      const acBpm = acResult.frequency * 60;
+      const agree = Math.abs(fftBpm - acBpm) / Math.max(fftBpm, acBpm) < 0.1;
+      if (agree) {
+        rawBpm = (fftBpm + acBpm) / 2;
+        confidence = Math.max(fftResult.confidence, acResult.confidence);
+      } else if (acResult.confidence > fftResult.confidence) {
+        rawBpm = acBpm;
+        confidence = acResult.confidence;
+      } else {
+        rawBpm = fftBpm;
+        confidence = fftResult.confidence;
+      }
+    } else if (acResult) {
+      rawBpm = acResult.frequency * 60;
+      confidence = acResult.confidence;
+    } else if (fftResult) {
+      rawBpm = fftResult.frequency * 60;
+      confidence = fftResult.confidence;
+    } else {
+      return null;
+    }
+
+    if (confidence < MIN_CONFIDENCE) return null;
+    if (rawBpm < BPM_MIN || rawBpm > BPM_MAX) return null;
+
+    this.lastBpm = rawBpm;
+
+    return {
+      rawBpm,
+      confidence,
+      signal: detrended,
+      filteredSignal: filtered,
+    };
+  }
+
+  private estimateByFFT(
+    filtered: Float64Array,
+    sampleRate: number,
+  ): { frequency: number; confidence: number } | null {
+    const windowed = hammingWindow(filtered);
     const n = nextPowerOf2(windowed.length);
     const re = new Float64Array(n);
     const im = new Float64Array(n);
@@ -195,19 +243,15 @@ export class RppgDetector {
     const spectrum = magnitudeSpectrum(re, im);
 
     const peak = findDominantPeak(spectrum, sampleRate, BPM_FREQ_MIN, BPM_FREQ_MAX);
-    if (!peak || peak.confidence < MIN_CONFIDENCE) return null;
+    if (!peak) return null;
+    return { frequency: peak.frequency, confidence: peak.confidence };
+  }
 
-    const rawBpm = peak.frequency * 60;
-    if (rawBpm < BPM_MIN || rawBpm > BPM_MAX) return null;
-
-    this.lastBpm = rawBpm;
-
-    return {
-      rawBpm,
-      confidence: peak.confidence,
-      signal: detrended,
-      filteredSignal: filtered,
-    };
+  private estimateByAutocorrelation(
+    filtered: Float64Array,
+    sampleRate: number,
+  ): { frequency: number; confidence: number } | null {
+    return autocorrelationPeak(filtered, sampleRate, BPM_FREQ_MIN, BPM_FREQ_MAX);
   }
 
   reset(): void {
