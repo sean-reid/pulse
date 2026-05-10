@@ -19,7 +19,7 @@ import { RppgDetector } from '../detection/rppg';
 import { BreathingDetector } from '../detection/breathing';
 import { VitalsFusion } from '../detection/vitals-fusion';
 import { iirCoefficient } from '../utils/math';
-import { appState, type Classification } from '../stores/app-state.svelte';
+import { appState } from '../stores/app-state.svelte';
 import {
   AMP_FREQ_MIN,
   AMP_FREQ_MAX,
@@ -77,12 +77,6 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
     appState.avgBpm = Math.round(avg);
     appState.bpmVariability = Math.round(stdDev * 10) / 10;
-
-    let cls: Classification;
-    if (avg < 72 && stdDev < 8) cls = 'relaxed';
-    else if (avg > 90 || stdDev > 15) cls = 'elevated';
-    else cls = 'moderate';
-    appState.classification = cls;
   }
 
   function init() {

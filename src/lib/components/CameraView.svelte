@@ -34,8 +34,7 @@
   let showStats = $derived(
     appState.faceDetected && appState.avgBpm !== null && appState.status === 'active',
   );
-  const classLabels = { relaxed: 'Relaxed', moderate: 'Moderate', elevated: 'Elevated' };
-  const classColors = { relaxed: 'text-green', moderate: 'text-amber', elevated: 'text-accent' };
+
 </script>
 
 <div class="fixed inset-0 bg-bg-primary flex flex-col">
@@ -100,11 +99,6 @@
             <span class="text-text-tertiary text-xs">Variability</span>
             <span class="text-text-primary tabular-nums ml-1">{appState.bpmVariability}</span>
           </div>
-          {#if appState.classification}
-            <span class="{classColors[appState.classification]} text-sm font-medium">
-              {classLabels[appState.classification]}
-            </span>
-          {/if}
         </div>
       {/if}
     </div>

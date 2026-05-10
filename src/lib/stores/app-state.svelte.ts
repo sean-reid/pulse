@@ -6,8 +6,6 @@ export type AppStatus =
   | 'active'
   | 'error';
 
-export type Classification = 'relaxed' | 'moderate' | 'elevated';
-
 let _started = $state(false);
 let _status = $state<AppStatus>('idle');
 let _error = $state<string | null>(null);
@@ -18,7 +16,6 @@ let _breathingRate = $state<number | null>(null);
 
 let _avgBpm = $state<number | null>(null);
 let _bpmVariability = $state<number | null>(null);
-let _classification = $state<Classification | null>(null);
 
 let _faceDetected = $state(false);
 let _modelLoaded = $state(false);
@@ -85,13 +82,6 @@ export const appState = {
     _bpmVariability = v;
   },
 
-  get classification() {
-    return _classification;
-  },
-  set classification(v: Classification | null) {
-    _classification = v;
-  },
-
   get faceDetected() {
     return _faceDetected;
   },
@@ -140,7 +130,6 @@ export const appState = {
     _breathingRate = null;
     _avgBpm = null;
     _bpmVariability = null;
-    _classification = null;
     _faceDetected = false;
     _calibrationProgress = 0;
     _waveformSignal = new Float64Array(0);
