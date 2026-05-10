@@ -23,7 +23,7 @@
   let progress = $derived(appState.status === 'calibrating' ? appState.calibrationProgress : 0);
 
   let visible = $derived(
-    appState.status === 'calibrating' ||
+    (appState.status === 'calibrating' && appState.faceDetected) ||
       appState.status === 'loading-model' ||
       (!appState.modelLoaded && appState.cameraActive),
   );

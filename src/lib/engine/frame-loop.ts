@@ -97,6 +97,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
     animationId = requestAnimationFrame(loop);
 
     if (video.currentTime === lastVideoTime) return;
+    const dt =
+      lastVideoTime < 0 ? 1 / CAMERA_FPS : Math.min(0.1, video.currentTime - lastVideoTime);
     lastVideoTime = video.currentTime;
     frameCount++;
 
@@ -104,15 +106,15 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
     if (appState.bpm !== null) {
       cardiacPhase =
-        (cardiacPhase + (2 * Math.PI * appState.bpm) / (60 * CAMERA_FPS)) % (2 * Math.PI);
+        (cardiacPhase + (2 * Math.PI * appState.bpm * dt) / 60) % (2 * Math.PI);
       const confidence = appState.bpmConfidence ?? 0;
       const targetBlend = Math.min(1, confidence * 1.5);
-      guidedBlend += (targetBlend - guidedBlend) / (BLEND_RAMP_S * CAMERA_FPS);
+      guidedBlend += (targetBlend - guidedBlend) * Math.min(1, dt / BLEND_RAMP_S);
     } else {
-      guidedBlend = Math.max(0, guidedBlend - 1 / (BLEND_DECAY_S * CAMERA_FPS));
+      guidedBlend = Math.max(0, guidedBlend - dt / BLEND_DECAY_S);
     }
 
-    smoothBreathSignal += 0.5 * (breathSignalRaw - smoothBreathSignal);
+    smoothBreathSignal += (breathSignalRaw - smoothBreathSignal) * Math.min(1, dt * 15);
 
     const ampParams: AmpParams = {
       pulseAlpha1: iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS),
