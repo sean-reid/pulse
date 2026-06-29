@@ -81,13 +81,21 @@ void main() {
   float faceMask = maskSample.r;
   float bodyMask = maskSample.g * (1.0 - faceMask);
 
-  // Breathing: horizontal chest expansion, tapered vertically for natural bulge
+  // Breathing: the upper torso lifts and gently widens on inhale, then settles back.
+  // u_breathSignal is a signed sinusoid at the detected rate, so the motion is smooth
+  // and symmetric (rise/fall) rather than a one-sided bulge. A vertical envelope keeps
+  // the lower frame anchored so the shoulders carry the motion like a real chest does.
   float dx = v_texCoord.x - u_bodyCenter.x;
-  float dy = abs(v_texCoord.y - u_bodyCenter.y);
-  float taper = 1.0 - smoothstep(0.0, 0.2, dy);
-  float expansion = max(0.0, u_breathSignal) * bodyMask * taper * 0.30;
-  float shrink = 1.0 / (1.0 + expansion);
-  vec2 warpedCoord = vec2(u_bodyCenter.x + dx * shrink, v_texCoord.y);
+  float env = bodyMask * smoothstep(1.0, 0.55, v_texCoord.y);
+  float breath = u_breathSignal * env;
+
+  // Vertical lift dominates (shoulders rising); horizontal expansion is a subtler cue.
+  float lift = breath * 0.022;
+  float expand = breath * 0.05;
+  vec2 warpedCoord = vec2(
+    u_bodyCenter.x + dx / (1.0 + expand),
+    v_texCoord.y + lift
+  );
   vec3 pixel = texture(u_currentFrame, warpedCoord).rgb;
 
   // Pulse: multiplicative skin-tone warming from global cardiac signal

@@ -13,6 +13,7 @@ let _error = $state<string | null>(null);
 let _bpm = $state<number | null>(null);
 let _bpmConfidence = $state(0);
 let _breathingRate = $state<number | null>(null);
+let _breathConfidence = $state(0);
 
 let _avgBpm = $state<number | null>(null);
 let _bpmVariability = $state<number | null>(null);
@@ -67,6 +68,13 @@ export const appState = {
   },
   set breathingRate(v: number | null) {
     _breathingRate = v;
+  },
+
+  get breathConfidence() {
+    return _breathConfidence;
+  },
+  set breathConfidence(v: number) {
+    _breathConfidence = v;
   },
 
   get avgBpm() {
@@ -136,6 +144,7 @@ export const appState = {
     _bpm = null;
     _bpmConfidence = 0;
     _breathingRate = null;
+    _breathConfidence = 0;
     _avgBpm = null;
     _bpmVariability = null;
     _faceDetected = false;

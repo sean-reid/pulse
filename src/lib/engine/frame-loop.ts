@@ -61,10 +61,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
 
   let cardiacPhase = 0;
   let guidedBlend = 0;
-  let breathBaseline = 0;
-  let breathBaselineInit = false;
-  let breathSignalRaw = 0;
-  let smoothBreathSignal = 0;
+  let breathPhase = 0;
+  let breathBlend = 0;
   let bodyCenterX = 0.5;
   let bodyCenterY = 0.7;
   let prevNoseX = 0;
@@ -121,7 +119,18 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       guidedBlend = Math.max(0, guidedBlend - dt / BLEND_DECAY_S);
     }
 
-    smoothBreathSignal += (breathSignalRaw - smoothBreathSignal) * Math.min(1, dt * 15);
+    // Breathing visualization is synthesized from a clean oscillator at the detected
+    // rate, mirroring the cardiac drive above. This reads as smooth respiration rather
+    // than tracking raw head motion, and ramps in and out with detection confidence.
+    if (appState.breathingRate !== null) {
+      breathPhase =
+        (breathPhase + (2 * Math.PI * appState.breathingRate * dt) / 60) % (2 * Math.PI);
+      const confidence = appState.breathConfidence ?? 0;
+      const targetBlend = Math.min(1, confidence * 1.5);
+      breathBlend += (targetBlend - breathBlend) * Math.min(1, dt / BLEND_RAMP_S);
+    } else {
+      breathBlend = Math.max(0, breathBlend - dt / BLEND_DECAY_S);
+    }
 
     const ampParams: AmpParams = {
       pulseAlpha1: iirCoefficient(AMP_FREQ_MIN, CAMERA_FPS),
@@ -129,7 +138,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       breathAlpha1: iirCoefficient(BREATH_FREQ_MIN, CAMERA_FPS),
       breathAlpha2: iirCoefficient(BREATH_FREQ_MAX, CAMERA_FPS),
       pulseSignal: Math.sin(cardiacPhase) * guidedBlend,
-      breathSignal: smoothBreathSignal,
+      breathSignal: Math.sin(breathPhase) * breathBlend,
       bodyCenterX,
       bodyCenterY,
     };
@@ -155,16 +164,6 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
           uploadMask(renderer, mask);
 
           breathing.sampleLandmarks(rois.breathLandmarkY);
-
-          const rawY = rois.breathLandmarkY;
-          if (!breathBaselineInit) {
-            breathBaseline = rawY;
-            breathBaselineInit = true;
-          } else {
-            breathBaseline += 0.02 * (rawY - breathBaseline);
-          }
-          const normalizedDisp = -(rawY - breathBaseline) / video.videoHeight;
-          breathSignalRaw = normalizedDisp * 80;
 
           bodyCenterX = (rois.chest.x + rois.chest.width / 2) / video.videoWidth;
           bodyCenterY = (rois.chest.y + rois.chest.height / 2) / video.videoHeight;
@@ -194,10 +193,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
             bpmHistory.length = 0;
             cardiacPhase = 0;
             guidedBlend = 0;
-            breathBaseline = 0;
-            breathBaselineInit = false;
-            breathSignalRaw = 0;
-            smoothBreathSignal = 0;
+            breathPhase = 0;
+            breathBlend = 0;
             prevNoseX = 0;
             prevNoseY = 0;
             smoothJitter = 0;
@@ -241,6 +238,7 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
           }
 
           appState.breathingRate = fused.breathRate;
+          appState.breathConfidence = fused.breathConfidence;
           appState.hrv = fused.hrv;
         }
       }
@@ -279,10 +277,8 @@ export function createFrameLoop(canvas: HTMLCanvasElement, video: HTMLVideoEleme
       bpmHistory.length = 0;
       cardiacPhase = 0;
       guidedBlend = 0;
-      breathBaseline = 0;
-      breathBaselineInit = false;
-      breathSignalRaw = 0;
-      smoothBreathSignal = 0;
+      breathPhase = 0;
+      breathBlend = 0;
       prevNoseX = 0;
       prevNoseY = 0;
       smoothJitter = 0;
